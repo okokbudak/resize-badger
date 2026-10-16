@@ -274,6 +274,8 @@ namespace ResizeBadger
             using (SettingsForm f = new SettingsForm(c, null))
             {
                 f.StartPosition = FormStartPosition.Manual; f.Location = new Point(-4000, -4000);
+                string sz = Arg(a, "--size");          // örn. 880x600 (pencere küçülünce yerleşimi denemek için)
+                if (sz != null) { string[] wh = sz.Split('x'); int ww, hh; if (wh.Length == 2 && int.TryParse(wh[0], out ww) && int.TryParse(wh[1], out hh)) f.Size = new Size(ww, hh); }
                 int then = -1, scroll = 0;
                 if ((v = Arg(a, "--then")) != null) int.TryParse(v, out then);      // önce başka sayfaya geçip geri dön (hata yeniden üretimi)
                 if ((v = Arg(a, "--scroll")) != null) int.TryParse(v, out scroll);  // sayfayı piksel kaydır

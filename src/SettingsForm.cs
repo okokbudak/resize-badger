@@ -29,7 +29,7 @@ namespace ResizeBadger
             cfg = c; app = a;
             AutoScaleDimensions = new SizeF(96f, 96f); AutoScaleMode = AutoScaleMode.Dpi;
             Text = "Resize Badger"; Font = Theme.Body; DoubleBuffered = true;
-            StartPosition = FormStartPosition.CenterScreen; ClientSize = new Size(1040, 720); MinimumSize = new Size(960, 640);
+            StartPosition = FormStartPosition.CenterScreen; ClientSize = new Size(1040, 720); MinimumSize = new Size(880, 600);
             Icon = a != null ? a.TrayIcon : AppContext.LoadIcon();
 
             // Dock sırası: önce Fill olan, sonra kenara yaslananlar eklenir
@@ -39,6 +39,7 @@ namespace ResizeBadger
             pages.Add(BuildWindowsPage()); pages.Add(BuildRulesPage()); pages.Add(BuildSurroundPage()); pages.Add(BuildGeneralPage());
             foreach (Panel p in pages) { content.Controls.Add(p); p.Visible = false; }
             content.Controls.Add(bar);
+            foreach (Panel pg in pages) foreach (Control k in pg.Controls) if (k is Card) FixCard((Card)k);
             Theme.Apply(this);
             FormClosed += delegate { if (!saved) { Theme.Mode = cfg.Theme; Theme.Reload(); } };
             GoPage(0);
@@ -114,11 +115,36 @@ namespace ResizeBadger
         Card NewCard(Panel page, int y, int h)
         {
             Card c = new Card(); c.SetBounds(PAD, y, CW, h);
+            c.Resize += delegate { FixCard(c); };
             page.Controls.Add(c); return c;
+        }
+
+        // Pencere daraldıkça sağa yaslı kutular sola kayar; yanlarındaki etiketler kutunun üstüne binmesin diye kısalır (…).
+        // Kartı tam kaplayan etiket/anahtarlar kart genişliğine uyar.
+        readonly Dictionary<Label, int> labelW = new Dictionary<Label, int>();
+        void FixCard(Card c)
+        {
+            foreach (Control ctl in c.Controls)
+            {
+                Label l = ctl as Label; int ow;
+                if (l != null && labelW.TryGetValue(l, out ow))
+                {
+                    int width = ow;
+                    if (ow >= CW - 100) width = c.Width - l.Left - 20;
+                    else
+                        foreach (Control o in c.Controls)
+                        {
+                            if (o == l || o is Label) continue;
+                            if (o.Left > l.Left && o.Top < l.Bottom && l.Top < o.Bottom) width = Math.Min(width, o.Left - 8 - l.Left);
+                        }
+                    l.Width = Math.Max(40, width); l.AutoEllipsis = true;
+                }
+                else if (ctl is Switch) ctl.Width = Math.Max(120, c.Width - ctl.Left - 20);
+            }
         }
         Label Lbl(Control parent, string text, int x, int y, int w, Font f, string role)
         {
-            Label l = new Label(); l.Text = text; l.Location = new Point(x, y); if (w > 0) { l.AutoSize = false; l.Size = new Size(w, 24); } else l.AutoSize = true;
+            Label l = new Label(); l.Text = text; l.Location = new Point(x, y); if (w > 0) { l.AutoSize = false; l.Size = new Size(w, 24); labelW[l] = w; } else l.AutoSize = true;
             if (f != null) l.Font = f; if (role != null) l.Tag = role; parent.Controls.Add(l); return l;
         }
         TextBox HotBox(Control parent, int actionIndex, int x, int y, int w, string value)
@@ -152,7 +178,7 @@ namespace ResizeBadger
             DataGridView g = new DataGridView(); g.SetBounds(x, y, w, h); g.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             g.AllowUserToAddRows = false; g.AllowUserToResizeRows = false; g.RowHeadersVisible = false;
             g.SelectionMode = DataGridViewSelectionMode.FullRowSelect; g.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-            g.ScrollBars = ScrollBars.Vertical;
+            g.ScrollBars = ScrollBars.Both;     // yatay çubuk yalnızca içerik sığmazsa görünür
             parent.Controls.Add(g); return g;
         }
         void TextCol(DataGridView g, string key, int w, bool fill)
@@ -320,9 +346,9 @@ namespace ResizeBadger
             Card c1 = NewCard(p, y, 150);
             Lbl(c1, L.T("sur.status"), 20, 16, 0, Theme.H2, null);
             surStatus = Lbl(c1, "", 20, 48, CW - 40, null, "accent");
-            Button on = Btn(c1, L.T("sur.on"), 20, 90, 190, true); on.Click += delegate { RunSurround(true); };
-            Button off = Btn(c1, L.T("sur.off"), 222, 90, 190, false); off.Click += delegate { RunSurround(false); };
-            Button rf = Btn(c1, L.T("sur.refresh"), 424, 90, 160, false); rf.Click += delegate { RefreshSurround(); };
+            Button on = Btn(c1, L.T("sur.on"), 20, 90, 170, true); on.Click += delegate { RunSurround(true); };
+            Button off = Btn(c1, L.T("sur.off"), 200, 90, 170, false); off.Click += delegate { RunSurround(false); };
+            Button rf = Btn(c1, L.T("sur.refresh"), 380, 90, 165, false); rf.Click += delegate { RefreshSurround(); };
             y += 150 + 16;
 
             Card c2 = NewCard(p, y, 290);

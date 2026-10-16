@@ -72,7 +72,14 @@ namespace ResizeBadger
     // Kaydırılan sayfa: WS_EX_COMPOSITED ile tüm çocuklar çift tamponlu çizilir (kaydırırken artık / üst üste binme olmaz)
     class Page : Panel
     {
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ShowScrollBar(IntPtr h, int bar, bool show);
         public Page() { DoubleBuffered = true; ResizeRedraw = true; }
+        // Sayfalar yalnızca dikey kaydırılır; yatay çubuk hiç gösterilmez (kartlar genişliğe uyar)
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            if (IsHandleCreated) ShowScrollBar(Handle, 0, false);
+        }
         protected override CreateParams CreateParams
         {
             get { CreateParams cp = base.CreateParams; cp.ExStyle |= 0x02000000; return cp; }
