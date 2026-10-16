@@ -203,7 +203,7 @@ namespace ResizeBadger
             Card c3 = NewCard(p, y, 246);
             Lbl(c3, L.T("win.auto"), 20, 16, 0, Theme.H2, null);
             Lbl(c3, L.T("win.autoPreset"), 20, 60, CW - 280, null, null);
-            autoBox = new ComboBox(); autoBox.DropDownStyle = ComboBoxStyle.DropDownList; autoBox.SetBounds(CW - 280, 56, 260, 28); autoBox.Anchor = AnchorStyles.Top | AnchorStyles.Right; c3.Controls.Add(autoBox);
+            autoBox = new ThemedCombo(); autoBox.DropDownStyle = ComboBoxStyle.DropDownList; autoBox.SetBounds(CW - 280, 56, 260, 28); autoBox.Anchor = AnchorStyles.Top | AnchorStyles.Right; c3.Controls.Add(autoBox);
             FillAutoBox();
             autoSw = new Switch(); autoSw.Text = L.T("win.autoApply"); autoSw.Checked = cfg.Auto; autoSw.SetBounds(20, 98, CW - 40, 30); c3.Controls.Add(autoSw);
             Lbl(c3, L.T("win.exclude"), 20, 146, CW - 40, null, "dim");
@@ -354,12 +354,12 @@ namespace ResizeBadger
             Card c1 = NewCard(p, y, 200);
             Lbl(c1, L.T("gen.appearance"), 20, 16, 0, Theme.H2, null);
             Lbl(c1, L.T("gen.language"), 20, 62, 200, null, null);
-            langBox = new ComboBox(); langBox.DropDownStyle = ComboBoxStyle.DropDownList; langBox.SetBounds(CW - 300, 58, 280, 28); langBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            langBox = new ThemedCombo(); langBox.DropDownStyle = ComboBoxStyle.DropDownList; langBox.SetBounds(CW - 300, 58, 280, 28); langBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             langBox.Items.Add(L.T("gen.langAuto")); foreach (string n in L.Names) langBox.Items.Add(n);
             langBox.SelectedIndex = cfg.Lang == "auto" ? 0 : Math.Max(0, Array.IndexOf(L.Codes, cfg.Lang) + 1);
             c1.Controls.Add(langBox);
             Lbl(c1, L.T("gen.theme"), 20, 108, 200, null, null);
-            themeBox = new ComboBox(); themeBox.DropDownStyle = ComboBoxStyle.DropDownList; themeBox.SetBounds(CW - 300, 104, 280, 28); themeBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            themeBox = new ThemedCombo(); themeBox.DropDownStyle = ComboBoxStyle.DropDownList; themeBox.SetBounds(CW - 300, 104, 280, 28); themeBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             themeBox.Items.Add(L.T("theme.system")); themeBox.Items.Add(L.T("theme.light")); themeBox.Items.Add(L.T("theme.dark"));
             themeBox.SelectedIndex = cfg.Theme == "light" ? 1 : (cfg.Theme == "dark" ? 2 : 0);
             themeBox.SelectedIndexChanged += delegate   // canlı önizleme

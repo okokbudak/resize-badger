@@ -21,6 +21,54 @@ namespace ResizeBadger
         }
     }
 
+    // Açılır kutu: kapalı görünümü tamamen kendimiz çiziyoruz (Windows'un çizimi koyu temada ve farklı ekran ölçeklerinde
+    // beyaz bant / kaymış metin bırakıyor). Açılan liste Theme.DrawComboItem ile çizilir.
+    class ThemedCombo : ComboBox
+    {
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct PAINTSTRUCT
+        {
+            public IntPtr hdc; public int fErase; public int L, T, R, B; public int fRestore, fIncUpdate;
+            [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValArray, SizeConst = 32)] public byte[] rgb;
+        }
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr BeginPaint(IntPtr h, out PAINTSTRUCT ps);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EndPaint(IntPtr h, ref PAINTSTRUCT ps);
+        bool hover;
+
+        public ThemedCombo() { DropDownStyle = ComboBoxStyle.DropDownList; }
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x0014) { m.Result = (IntPtr)1; return; }                 // WM_ERASEBKGND
+            if (m.Msg == 0x000F && DropDownStyle == ComboBoxStyle.DropDownList)    // WM_PAINT
+            {
+                PAINTSTRUCT ps;
+                IntPtr dc = BeginPaint(Handle, out ps);
+                try { using (Graphics g = Graphics.FromHdc(dc)) Draw(g); }
+                finally { EndPaint(Handle, ref ps); }
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        void Draw(Graphics g)
+        {
+            Palette p = Theme.P; Rectangle r = ClientRectangle;
+            using (SolidBrush b = new SolidBrush(p.Field)) g.FillRectangle(b, r);
+            using (Pen pen = new Pen(Focused ? p.Accent : (hover ? p.Dim : p.Border))) g.DrawRectangle(pen, 0, 0, r.Width - 1, r.Height - 1);
+            string t = SelectedItem != null ? GetItemText(SelectedItem) : "";
+            TextRenderer.DrawText(g, t, Theme.Body, new Rectangle(8, 0, Math.Max(10, r.Width - 8 - 28), r.Height), p.Text,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int cx = r.Width - 16, cy = r.Height / 2;
+            using (Pen cp = new Pen(p.Dim, 1.6f)) g.DrawLines(cp, new Point[] { new Point(cx - 4, cy - 2), new Point(cx, cy + 2), new Point(cx + 4, cy - 2) });
+        }
+    }
+
     // Kaydırılan sayfa: WS_EX_COMPOSITED ile tüm çocuklar çift tamponlu çizilir (kaydırırken artık / üst üste binme olmaz)
     class Page : Panel
     {
