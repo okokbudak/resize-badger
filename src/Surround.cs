@@ -56,14 +56,14 @@ namespace ResizeBadger
             try
             {
                 DInit init = Fn<DInit>(ID_INIT);
-                if (init == null || init() != 0) return "NVAPI başlatılamadı (NVIDIA ekran kartı/sürücüsü yok mu?)";
+                if (init == null || init() != 0) return L.T("sur.err.init");
                 fEnable = Fn<DEnable>(ID_ENABLE); fEnum = Fn<DEnum>(ID_ENUM); fSet = Fn<DSet>(ID_SET);
                 fValidate = Fn<DValidate>(ID_VALIDATE); fDispId = Fn<DDispId>(ID_DISPID);
-                if (fEnum == null || fSet == null) return "Bu sürücü Surround (Mosaic) API'sini sunmuyor.";
+                if (fEnum == null || fSet == null) return L.T("sur.err.api");
                 inited = true; return null;
             }
-            catch (DllNotFoundException) { return "nvapi64.dll bulunamadı (NVIDIA sürücüsü kurulu değil)."; }
-            catch (Exception e) { return "NVAPI hatası: " + e.Message; }
+            catch (DllNotFoundException) { return L.T("sur.err.dll"); }
+            catch (Exception e) { return L.F("sur.err.nvapi", e.Message); }
         }
 
         // ---------------------------------------------------------------- ham yapı yardımcıları
@@ -132,8 +132,8 @@ namespace ResizeBadger
             List<SurroundGrid> gs = Grids();
             foreach (SurroundGrid g in gs)
                 if (g.IsSurround)
-                    return "Surround AÇIK: " + g.Cols + "x" + g.Rows + " ızgara, " + g.Count + " ekran, ekran başına " + g.W + "x" + g.H + " @ " + g.Hz + " Hz  (toplam " + (g.W * g.Cols) + "x" + (g.H * g.Rows) + ")";
-            return "Surround KAPALI (" + gs.Count + " ayrı ekran görünüyor)";
+                    return L.F("sur.state.on", g.Cols, g.Rows, g.Count, g.W, g.H, g.Hz, g.W * g.Cols, g.H * g.Rows);
+            return L.F("sur.state.off", gs.Count);
         }
 
         // ---------------------------------------------------------------- yazma
@@ -142,7 +142,7 @@ namespace ResizeBadger
         {
             string err = Init(); if (err != null) return err;
             SurroundGrid a = Active();
-            if (a == null) return "Önce Surround'u etkinleştirin (NVIDIA uygulamasıyla), sonra kaydedin.";
+            if (a == null) return L.T("sur.err.needActive");
             File.WriteAllBytes(ProfilePath, a.Raw);
             return null;
         }
@@ -170,7 +170,7 @@ namespace ResizeBadger
                 if (b.Length == GRID) return b;
             }
             List<SurroundGrid> gs = Grids();
-            if (gs.Count < 2) { err = "Surround için en az 2 ekran gerekli."; return null; }
+            if (gs.Count < 2) { err = L.T("sur.err.min2"); return null; }
             // soldan sağa: Windows'taki ekran konumuna göre sırala
             List<Screen> scr = new List<Screen>(Screen.AllScreens);
             scr.Sort(delegate(Screen a, Screen b) { return a.Bounds.X.CompareTo(b.Bounds.X); });
@@ -180,7 +180,7 @@ namespace ResizeBadger
                 uint id;
                 if (fDispId != null && fDispId(s.DeviceName, out id) == 0) ids.Add((int)id);
             }
-            if (ids.Count < 2) { err = "Ekranların NVIDIA kimlikleri bulunamadı."; return null; }
+            if (ids.Count < 2) { err = L.T("sur.err.ids"); return null; }
             SurroundGrid f = gs[0];
             return NewGrid(1, ids.Count, GRIDFLAG_DEFAULT, ids.ToArray(), f.W, f.H, f.Bpp == 0 ? 32 : f.Bpp, f.Hz);
         }
@@ -215,8 +215,8 @@ namespace ResizeBadger
                 rc = SetGrids(singles);
             }
             Debug += "setGrids rc=" + rc + "; ";
-            if (rc != 0) return "NVAPI SetDisplayGrids hata kodu: " + rc;
-            if (!WaitFor(on)) return "Sürücü değişikliği zamanında uygulamadı.";
+            if (rc != 0) return L.F("sur.err.set", rc);
+            if (!WaitFor(on)) return L.T("sur.err.timeout");
             if (!on) { Thread.Sleep(1200); ArrangePrimary(PrimaryAfterOff); }
             return null;
         }
