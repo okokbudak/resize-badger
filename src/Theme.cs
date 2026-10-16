@@ -108,6 +108,19 @@ namespace ResizeBadger
             P = p;
         }
 
+        static void DrawComboItem(object sender, DrawItemEventArgs e)
+        {
+            ComboBox cb = (ComboBox)sender; Palette p = P;
+            bool closedBox = (e.State & DrawItemState.ComboBoxEdit) != 0;
+            bool hot = !closedBox && (e.State & DrawItemState.Selected) != 0;
+            Color back = hot ? Mix(p.Surface, p.Accent, 0.35) : p.Field;
+            using (SolidBrush b = new SolidBrush(back)) e.Graphics.FillRectangle(b, e.Bounds);
+            if (e.Index < 0 || e.Index >= cb.Items.Count) return;
+            Rectangle r = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
+            TextRenderer.DrawText(e.Graphics, cb.GetItemText(cb.Items[e.Index]), Body, r, p.Text,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+        }
+
         static int Bgr(Color c) { return c.R | (c.G << 8) | (c.B << 16); }
 
         // Başlık çubuğunu temaya uydur (Windows 10 20H1+ koyu, Windows 11'de renk)
@@ -160,7 +173,15 @@ namespace ResizeBadger
                 }
             }
             else if (c is TextBox) { c.BackColor = p.Field; c.ForeColor = p.Text; ((TextBox)c).BorderStyle = BorderStyle.FixedSingle; }
-            else if (c is ComboBox) { ComboBox cb = (ComboBox)c; cb.FlatStyle = FlatStyle.Flat; cb.BackColor = p.Field; cb.ForeColor = p.Text; NativeTheme(cb, "DarkMode_CFD", "Combobox"); }
+            else if (c is ComboBox)
+            {
+                ComboBox cb = (ComboBox)c; cb.FlatStyle = FlatStyle.Flat; cb.BackColor = p.Field; cb.ForeColor = p.Text;
+                // Sistem çizimi koyu temada metni/arka planı kaydırıyor: öğeleri kendimiz çiziyoruz
+                cb.DrawMode = DrawMode.OwnerDrawFixed; cb.ItemHeight = 22;
+                cb.DrawItem -= DrawComboItem; cb.DrawItem += DrawComboItem;
+                NativeTheme(cb, "DarkMode_CFD", "Combobox");
+                cb.Invalidate();
+            }
             else if (c is NumericUpDown) { c.BackColor = p.Field; c.ForeColor = p.Text; }
             else if (c is DataGridView) StyleGrid((DataGridView)c);
             else if (c is ListView) { c.BackColor = p.Surface; c.ForeColor = p.Text; ((ListView)c).BorderStyle = BorderStyle.None; NativeTheme(c, "DarkMode_Explorer", null); }
