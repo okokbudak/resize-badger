@@ -14,7 +14,7 @@ namespace ResizeBadger
         Panel nav, content, bar;
         readonly List<Panel> pages = new List<Panel>();
         readonly List<NavButton> navBtns = new List<NavButton>();
-        bool saved;
+        bool saved; int curIdx;
 
         // sayfa denetimleri
         DataGridView grid, ruleGrid; DataGridViewComboBoxColumn ruleCombo;
@@ -80,9 +80,23 @@ namespace ResizeBadger
 
         void GoPage(int i)
         {
-            for (int k = 0; k < pages.Count; k++) { pages[k].Visible = (k == i); navBtns[k].Selected = (k == i); navBtns[k].Invalidate(); }
+            curIdx = i;
+            SuspendLayout();
+            for (int k = 0; k < pages.Count; k++)
+            {
+                Page pg = (Page)pages[k];
+                if (k != i) { pg.ResetScroll(); pg.Visible = false; }   // (Visible okunmaz: form gösterilmeden önce hep false döner)
+                navBtns[k].Selected = (k == i); navBtns[k].Invalidate();
+            }
+            Page cur = (Page)pages[i];
+            cur.ResetScroll(); cur.Visible = true;
+            cur.BringToFront(); bar.SendToBack();     // Fill sayfa en öne, alt çubuk en arkaya: dock sırası bozulmasın
+            ResumeLayout(true);
+            cur.Invalidate(true);
             if (i == 2 && surStatus != null && app != null) RefreshSurround();
         }
+
+        public void ScrollCurrent(int px) { pages[curIdx].AutoScrollPosition = new Point(0, px); }
 
         public void ShowPage(int i) { GoPage(i); Show(); if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal; Activate(); }
         public void ThemeChanged() { Theme.Apply(this); }
@@ -90,14 +104,16 @@ namespace ResizeBadger
         // ---------------------------------------------------------------- yardımcılar
         Panel NewPage(string title, string desc)
         {
-            Panel p = new Panel(); p.Size = new Size(ContentW, ContentH); p.Dock = DockStyle.Fill; p.AutoScroll = true; p.Tag = "page";
+            Page p = new Page(); p.Size = new Size(ContentW, ContentH); p.Dock = DockStyle.Fill; p.AutoScroll = true; p.Tag = "page";
+            // kartlar her sayfada aynı kenar boşluğuyla (kaydırma çubuğu olsun olmasın) sayfa genişliğine uyar
+            p.Resize += delegate { foreach (Control k in p.Controls) if (k is Card) k.Width = Math.Max(480, p.ClientSize.Width - 2 * PAD); };
             Label h = new Label(); h.Text = title; h.Font = Theme.H1; h.AutoSize = true; h.Location = new Point(PAD, 22); p.Controls.Add(h);
             Label d = new Label(); d.Text = desc; d.Tag = "dim"; d.AutoSize = true; d.Location = new Point(PAD + 2, 66); p.Controls.Add(d);
             return p;
         }
         Card NewCard(Panel page, int y, int h)
         {
-            Card c = new Card(); c.SetBounds(PAD, y, CW, h); c.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            Card c = new Card(); c.SetBounds(PAD, y, CW, h);
             page.Controls.Add(c); return c;
         }
         Label Lbl(Control parent, string text, int x, int y, int w, Font f, string role)

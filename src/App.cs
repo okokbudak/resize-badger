@@ -274,7 +274,13 @@ namespace ResizeBadger
             using (SettingsForm f = new SettingsForm(c, null))
             {
                 f.StartPosition = FormStartPosition.Manual; f.Location = new Point(-4000, -4000);
+                int then = -1, scroll = 0;
+                if ((v = Arg(a, "--then")) != null) int.TryParse(v, out then);      // önce başka sayfaya geçip geri dön (hata yeniden üretimi)
+                if ((v = Arg(a, "--scroll")) != null) int.TryParse(v, out scroll);  // sayfayı piksel kaydır
                 f.ShowPage(page);
+                for (int i = 0; i < 4; i++) { Application.DoEvents(); Thread.Sleep(60); }
+                if (scroll > 0) { f.ScrollCurrent(scroll); for (int i = 0; i < 3; i++) { Application.DoEvents(); Thread.Sleep(60); } }
+                if (then >= 0) { f.ShowPage(then); for (int i = 0; i < 3; i++) { Application.DoEvents(); Thread.Sleep(60); } f.ShowPage(page); }
                 for (int i = 0; i < 6; i++) { Application.DoEvents(); Thread.Sleep(60); }
                 using (Bitmap bmp = new Bitmap(f.Width, f.Height))
                 {

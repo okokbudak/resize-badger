@@ -73,9 +73,9 @@ namespace ResizeBadger
             A("col.name", "Ad", "Name", "Name", "Nombre", "Nom");
             A("col.width", "Genişlik", "Width", "Breite", "Ancho", "Largeur");
             A("col.height", "Yükseklik", "Height", "Höhe", "Alto", "Hauteur");
-            A("col.center", "Ortala", "Center", "Zentrieren", "Centrar", "Centrer");
-            A("col.borderless", "Kenarlıksız", "Borderless", "Rahmenlos", "Sin bordes", "Sans bordure");
-            A("col.inner", "İç alan", "Client area", "Innenbereich", "Área interior", "Zone client");
+            A("col.center", "Ortala", "Center", "Mitte", "Centrar", "Centrer");
+            A("col.borderless", "Kenarlıksız", "Borderless", "Rahmenlos", "Sin bordes", "Sans cadre");
+            A("col.inner", "İç alan", "Client area", "Innen", "Interior", "Intérieur");
             A("col.hotkey", "Kısayol", "Shortcut", "Tastenkürzel", "Atajo", "Raccourci");
             A("preset.new", "Yeni", "New", "Neu", "Nuevo", "Nouveau");
 

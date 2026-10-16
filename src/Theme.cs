@@ -21,6 +21,25 @@ namespace ResizeBadger
 
         [DllImport("dwmapi.dll")] static extern int DwmGetColorizationColor(out uint c, out bool opaque);
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int v, int size);
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] static extern int SetWindowTheme(IntPtr h, string app, string idList);
+        [DllImport("user32.dll")] static extern bool RedrawWindow(IntPtr h, IntPtr rect, IntPtr rgn, uint flags);
+
+        // Yerel kaydırma çubukları / açılır listeler temayı (açık/koyu) izlesin
+        static void NativeTheme(Control c, string darkApp, string darkClass)
+        {
+            c.HandleCreated -= OnNativeHandle; c.HandleCreated += OnNativeHandle;
+            if (c.IsHandleCreated) ApplyNative(c, darkApp, darkClass);
+        }
+        static void OnNativeHandle(object s, EventArgs e) { Control c = (Control)s; ApplyNative(c, c is ComboBox ? "DarkMode_CFD" : "DarkMode_Explorer", c is ComboBox ? "Combobox" : null); }
+        static void ApplyNative(Control c, string darkApp, string darkClass)
+        {
+            try
+            {
+                if (P.Dark) SetWindowTheme(c.Handle, darkApp, darkClass); else SetWindowTheme(c.Handle, "Explorer", null);
+                RedrawWindow(c.Handle, IntPtr.Zero, IntPtr.Zero, 0x0001 | 0x0400 | 0x0080 | 0x0100);   // INVALIDATE | FRAME | ALLCHILDREN | UPDATENOW
+            }
+            catch { }
+        }
 
         static Theme()
         {
@@ -122,7 +141,8 @@ namespace ResizeBadger
             Palette p = P;
             string role = c.Tag as string ?? "";
             if (c is Card) { c.BackColor = p.Surface; c.ForeColor = p.Text; }
-            else if (c is NavButton || c is Switch) { c.ForeColor = p.Text; }
+            else if (c is NavButton) { c.ForeColor = p.Text; }
+            else if (c is Switch) { c.ForeColor = p.Text; c.BackColor = c.Parent != null ? c.Parent.BackColor : p.Surface; }
             else if (c is Button)
             {
                 Button b = (Button)c;
@@ -140,13 +160,14 @@ namespace ResizeBadger
                 }
             }
             else if (c is TextBox) { c.BackColor = p.Field; c.ForeColor = p.Text; ((TextBox)c).BorderStyle = BorderStyle.FixedSingle; }
-            else if (c is ComboBox) { ComboBox cb = (ComboBox)c; cb.FlatStyle = FlatStyle.Flat; cb.BackColor = p.Field; cb.ForeColor = p.Text; }
+            else if (c is ComboBox) { ComboBox cb = (ComboBox)c; cb.FlatStyle = FlatStyle.Flat; cb.BackColor = p.Field; cb.ForeColor = p.Text; NativeTheme(cb, "DarkMode_CFD", "Combobox"); }
             else if (c is NumericUpDown) { c.BackColor = p.Field; c.ForeColor = p.Text; }
             else if (c is DataGridView) StyleGrid((DataGridView)c);
-            else if (c is ListView) { c.BackColor = p.Surface; c.ForeColor = p.Text; ((ListView)c).BorderStyle = BorderStyle.None; }
+            else if (c is ListView) { c.BackColor = p.Surface; c.ForeColor = p.Text; ((ListView)c).BorderStyle = BorderStyle.None; NativeTheme(c, "DarkMode_Explorer", null); }
             else if (c is Label)
             {
-                c.BackColor = Color.Transparent;
+                // saydam değil, ebeveynin rengi: kaydırırken artık/üst üste binme olmasın
+                c.BackColor = c.Parent != null ? c.Parent.BackColor : p.Bg;
                 c.ForeColor = (role == "dim") ? p.Dim : (role == "accent" ? p.Accent : p.Text);
             }
             else if (c is Panel)
@@ -155,6 +176,7 @@ namespace ResizeBadger
                 else if (role == "navline") c.BackColor = p.Border;
                 else c.BackColor = p.Bg;
                 c.ForeColor = p.Text;
+                if (((Panel)c).AutoScroll) NativeTheme(c, "DarkMode_Explorer", null);
             }
             foreach (Control ch in c.Controls) Style(ch);
         }
@@ -174,6 +196,8 @@ namespace ResizeBadger
             g.DefaultCellStyle.BackColor = p.Surface; g.DefaultCellStyle.ForeColor = p.Text;
             g.DefaultCellStyle.SelectionBackColor = Mix(p.Surface, p.Accent, 0.35); g.DefaultCellStyle.SelectionForeColor = p.Text;
             g.DefaultCellStyle.Font = Body;
+            NativeTheme(g, "DarkMode_Explorer", null);
+            foreach (Control sb in g.Controls) if (sb is ScrollBar) NativeTheme(sb, "DarkMode_Explorer", null);   // tablonun kendi kaydırma çubukları
         }
 
         // Tepsi / bağlam menüsü

@@ -21,6 +21,18 @@ namespace ResizeBadger
         }
     }
 
+    // Kaydırılan sayfa: WS_EX_COMPOSITED ile tüm çocuklar çift tamponlu çizilir (kaydırırken artık / üst üste binme olmaz)
+    class Page : Panel
+    {
+        public Page() { DoubleBuffered = true; ResizeRedraw = true; }
+        protected override CreateParams CreateParams
+        {
+            get { CreateParams cp = base.CreateParams; cp.ExStyle |= 0x02000000; return cp; }
+        }
+        // Gizlenirken kaydırma konumunu sıfırla: aksi halde tekrar gösterilince çocuklar yerinden kayar
+        public void ResetScroll() { AutoScrollPosition = new Point(0, 0); }
+    }
+
     // Yuvarlak köşeli kart paneli
     class Card : Panel
     {
@@ -55,6 +67,7 @@ namespace ResizeBadger
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Palette p = Theme.P;
+            g.Clear(BackColor.A == 255 ? BackColor : (Parent != null ? Parent.BackColor : p.Surface));
             g.SmoothingMode = SmoothingMode.AntiAlias;
             int w = 40, h = 20, y = (Height - h) / 2;
             Rectangle pill = new Rectangle(1, y, w, h);
