@@ -1,0 +1,10 @@
+# derleme çıktısı
+*.exe
+*.pdb
+bin/
+obj/
+out/
+
+# kişisel / makineye özel ayarlar (programın yanında oluşur)
+settings.ini
+surround_profile.bin
