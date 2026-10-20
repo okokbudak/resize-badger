@@ -15,10 +15,12 @@ namespace ResizeBadger
     class HotWindow : NativeWindow
     {
         public event Action<int> Pressed;
+        public event Action<int> Broadcast;   // ekran düzeni / tema değişimi (üst düzey gizli pencere Windows yayınlarını alır)
         public HotWindow() { CreateHandle(new CreateParams()); }
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == 0x0312 && Pressed != null) Pressed(m.WParam.ToInt32());
+            else if ((m.Msg == 0x007E || m.Msg == 0x001A || m.Msg == 0x031A || m.Msg == 0x0320) && Broadcast != null) Broadcast(m.Msg);   // DISPLAYCHANGE, SETTINGCHANGE, THEMECHANGED, DWMCOLORIZATIONCOLORCHANGED
             base.WndProc(ref m);
         }
     }
@@ -32,7 +34,6 @@ namespace ResizeBadger
         NotifyIcon tray; HotWindow hw; SettingsForm form;
         ToolStripMenuItem autoItem, startupItem;
         int hotCount;
-        readonly SynchronizationContext ui = SynchronizationContext.Current;
 
         public AppContext()
         {
@@ -46,21 +47,42 @@ namespace ResizeBadger
             tray = new NotifyIcon(); tray.Icon = TrayIcon; tray.Text = "Resize Badger"; tray.Visible = true;
             Wm.Notify += delegate(string msg) { tray.ShowBalloonTip(4000, "Resize Badger", msg, ToolTipIcon.Warning); };
             tray.DoubleClick += delegate { ShowSettings(0); };
-            SystemEvents.UserPreferenceChanged += OnSystemTheme;
+            // Surround hangi yolla kapanırsa kapansın (NVIDIA uygulaması dahil) seçilen ana ekran uygulansın
+            lastSurround = Surround.IsOn();
+            dispTimer = new System.Windows.Forms.Timer(); dispTimer.Interval = 2500; dispTimer.Tick += OnDisplayStable;
+            themeTimer = new System.Windows.Forms.Timer(); themeTimer.Interval = 400; themeTimer.Tick += OnThemeStable;
+            hw.Broadcast += OnBroadcast;
             Rebuild();
             if (Cfg.Migrated) tray.ShowBalloonTip(8000, "Resize Badger", L.T("msg.hotkeysMigrated"), ToolTipIcon.Info);
         }
 
-        // Windows teması / vurgu rengi değişince (tema "Windows teması" ise) uygulamayı da güncelle
-        void OnSystemTheme(object s, UserPreferenceChangedEventArgs e)
+        bool lastSurround; System.Windows.Forms.Timer dispTimer, themeTimer;
+
+        // Gizli pencereye gelen Windows yayınları (UI iş parçacığında): ekran düzeni ve tema değişimi
+        void OnBroadcast(int msg)
         {
-            if (e.Category != UserPreferenceCategory.General && e.Category != UserPreferenceCategory.Color && e.Category != UserPreferenceCategory.VisualStyle) return;
-            ui.Post(delegate
-            {
-                if (Theme.Mode != "system") return;
-                Theme.Reload(); Rebuild();
-                if (form != null && !form.IsDisposed) form.ThemeChanged();
-            }, null);
+            System.Windows.Forms.Timer t = (msg == 0x007E) ? dispTimer : themeTimer;
+            t.Stop(); t.Start();      // dalgalanma bitene kadar bekle (debounce)
+        }
+
+        void OnDisplayStable(object s, EventArgs e)
+        {
+            dispTimer.Stop();
+            bool now = Surround.IsOn();
+            if (lastSurround && !now && Cfg.SurroundPrimary > 0) Surround.ArrangePrimary(Cfg.SurroundPrimary, 0);
+            lastSurround = now;
+        }
+
+        // Windows teması / vurgu rengi değişince (tema "Windows teması" ise) uygulamayı da güncelle
+        void OnThemeStable(object s, EventArgs e)
+        {
+            themeTimer.Stop();
+            if (Theme.Mode != "system") return;
+            bool dark = Theme.P.Dark; Color acc = Theme.P.Accent;
+            Theme.Reload();
+            if (Theme.P.Dark == dark && Theme.P.Accent == acc) return;     // değişen bir şey yok (WM_SETTINGCHANGE çok sık gelir)
+            Rebuild();
+            if (form != null && !form.IsDisposed) form.ThemeChanged();
         }
 
         public void ShowSettings(int page)
@@ -231,7 +253,7 @@ namespace ResizeBadger
 
         void Exit()
         {
-            SystemEvents.UserPreferenceChanged -= OnSystemTheme;
+            dispTimer.Stop(); themeTimer.Stop();
             Wm.StopHooks();
             for (int i = 1; i <= hotCount; i++) N.UnregisterHotKey(hw.Handle, i);
             tray.Visible = false; tray.Dispose();

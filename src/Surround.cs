@@ -1,6 +1,7 @@
 // NVIDIA Surround (Mosaic) hızlı yönetimi - NVAPI doğrudan (NVIDIA uygulamasını beklemeden)
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -172,13 +173,11 @@ namespace ResizeBadger
             List<SurroundGrid> gs = Grids();
             if (gs.Count < 2) { err = L.T("sur.err.min2"); return null; }
             // soldan sağa: Windows'taki ekran konumuna göre sırala
-            List<Screen> scr = new List<Screen>(Screen.AllScreens);
-            scr.Sort(delegate(Screen a, Screen b) { return a.Bounds.X.CompareTo(b.Bounds.X); });
             List<int> ids = new List<int>();
-            foreach (Screen s in scr)
+            foreach (Mon s in Monitors())
             {
                 uint id;
-                if (fDispId != null && fDispId(s.DeviceName, out id) == 0) ids.Add((int)id);
+                if (fDispId != null && fDispId(s.Name, out id) == 0) ids.Add((int)id);
             }
             if (ids.Count < 2) { err = L.T("sur.err.ids"); return null; }
             SurroundGrid f = gs[0];
@@ -198,7 +197,7 @@ namespace ResizeBadger
             string err = Init(); if (err != null) return err;
             bool isOn = Active() != null;
             if (isOn == on) return null;
-            int rc = -1;
+            int rc = -1, expect = 0;
             Debug = "";
             // NvAPI_Mosaic_EnableCurrentTopo bu sürücüde ~40 sn bekleyip hata veriyor; ızgaraları doğrudan yazıyoruz.
             if (on)
@@ -210,6 +209,7 @@ namespace ResizeBadger
             {
                 SurroundGrid a = Active();
                 if (a == null) return null;   // hızlı yol uygulamış, sadece geç görünmüş
+                expect = a.Ids.Length;
                 List<byte[]> singles = new List<byte[]>();
                 foreach (int id in a.Ids) singles.Add(NewGrid(1, 1, 0, new int[] { id }, a.W, a.H, a.Bpp == 0 ? 32 : a.Bpp, a.Hz));
                 rc = SetGrids(singles);
@@ -217,7 +217,7 @@ namespace ResizeBadger
             Debug += "setGrids rc=" + rc + "; ";
             if (rc != 0) return L.F("sur.err.set", rc);
             if (!WaitFor(on)) return L.T("sur.err.timeout");
-            if (!on) { Thread.Sleep(1200); ArrangePrimary(PrimaryAfterOff); }
+            if (!on) ArrangePrimary(PrimaryAfterOff, expect);
             return null;
         }
 
@@ -241,30 +241,62 @@ namespace ResizeBadger
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettingsEx(string dev, ref DEVMODE dm, IntPtr hwnd, uint flags, IntPtr lp);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettingsEx(string dev, IntPtr dm, IntPtr hwnd, uint flags, IntPtr lp);
 
-        public static void ArrangePrimary(int indexFromLeft)
+        class Mon { public string Name; public Rectangle B; public bool Primary; }
+        delegate bool MonEnumProc(IntPtr hMon, IntPtr hdc, IntPtr rc, IntPtr data);
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct MONITORINFOEX
+        {
+            public int cbSize, L, T, R, B, wL, wT, wR, wB; public uint flags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dev;
+        }
+        [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonEnumProc p, IntPtr data);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr h, ref MONITORINFOEX mi);
+
+        // Windows'un ANLIK ekran listesi, soldan sağa. (System.Windows.Forms.Screen listeyi önbellekte tutar; Surround kapanınca
+        // bir süre eski listeyi verebiliyor ve ana ekran ayarı sessizce atlanıyordu.)
+        static List<Mon> Monitors()
+        {
+            List<Mon> l = new List<Mon>();
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr h, IntPtr dc, IntPtr rc, IntPtr d)
+            {
+                MONITORINFOEX mi = new MONITORINFOEX(); mi.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+                if (GetMonitorInfo(h, ref mi))
+                {
+                    Mon m = new Mon(); m.Name = mi.dev; m.B = Rectangle.FromLTRB(mi.L, mi.T, mi.R, mi.B); m.Primary = (mi.flags & 1) != 0; l.Add(m);
+                }
+                return true;
+            }, IntPtr.Zero);
+            l.Sort(delegate(Mon a, Mon b) { return a.B.X.CompareTo(b.B.X); });
+            return l;
+        }
+
+        // minScreens: Surround kapanınca beklenen ekran sayısı (sürücü hepsini geri getirene kadar beklenir). Sonucu doğrulayıp gerekirse yeniden dener.
+        public static void ArrangePrimary(int indexFromLeft, int minScreens)
         {
             try
             {
-                List<Screen> scr = new List<Screen>(Screen.AllScreens);
-                if (scr.Count < 2) return;
-                scr.Sort(delegate(Screen a, Screen b) { return a.Bounds.X.CompareTo(b.Bounds.X); });
-                Screen chosen = scr[Math.Max(0, Math.Min(indexFromLeft - 1, scr.Count - 1))];
-                if (chosen.Primary && chosen.Bounds.X == 0 && chosen.Bounds.Y == 0) return;
-                int ox = chosen.Bounds.X, oy = chosen.Bounds.Y;
-                // seçilen ekranı önce (ana ekran + 0,0), sonra diğerlerini
-                scr.Remove(chosen); scr.Insert(0, chosen);
-                foreach (Screen s in scr)
+                for (int attempt = 0; attempt < 6; attempt++)
                 {
-                    DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
-                    if (!EnumDisplaySettings(s.DeviceName, -1, ref dm)) continue;
-                    dm.dmFields = 0x20;                       // DM_POSITION
-                    dm.dmPositionX = s.Bounds.X - ox; dm.dmPositionY = s.Bounds.Y - oy;
-                    uint fl = 0x1 | 0x10000000;               // CDS_UPDATEREGISTRY | CDS_NORESET
-                    if (s == chosen) fl |= 0x10;              // CDS_SET_PRIMARY
-                    ChangeDisplaySettingsEx(s.DeviceName, ref dm, IntPtr.Zero, fl, IntPtr.Zero);
+                    List<Mon> scr = Monitors();
+                    if (scr.Count < Math.Max(2, minScreens)) { Thread.Sleep(1000); continue; }   // ekranlar henüz geri gelmedi
+                    Mon chosen = scr[Math.Max(0, Math.Min(indexFromLeft - 1, scr.Count - 1))];
+                    if (chosen.Primary && chosen.B.X == 0 && chosen.B.Y == 0) return;           // zaten istenen düzen
+                    int ox = chosen.B.X, oy = chosen.B.Y;
+                    // seçilen ekranı önce (ana ekran + 0,0), sonra diğerlerini
+                    scr.Remove(chosen); scr.Insert(0, chosen);
+                    foreach (Mon s in scr)
+                    {
+                        DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+                        if (!EnumDisplaySettings(s.Name, -1, ref dm)) continue;
+                        dm.dmFields = 0x20;                       // DM_POSITION
+                        dm.dmPositionX = s.B.X - ox; dm.dmPositionY = s.B.Y - oy;
+                        uint fl = 0x1 | 0x10000000;               // CDS_UPDATEREGISTRY | CDS_NORESET
+                        if (s == chosen) fl |= 0x10;              // CDS_SET_PRIMARY
+                        ChangeDisplaySettingsEx(s.Name, ref dm, IntPtr.Zero, fl, IntPtr.Zero);
+                    }
+                    ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);   // uygula
+                    Thread.Sleep(1500);                                                          // oturması için; döngü başında doğrulanır
                 }
-                ChangeDisplaySettingsEx(null, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);   // uygula
-                Thread.Sleep(800);
             }
             catch { }
         }
