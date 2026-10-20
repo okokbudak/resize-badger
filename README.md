@@ -24,7 +24,8 @@ ResizeBadger-Setup.exe /S [/D=klasör] [/desktop] [/startup] [/norun]
 ```
 Taşınabilir kullanım için `ResizeBadger.exe` tek başına da çalışır; ayarlar exe'nin yanındaki `settings.ini` dosyasında tutulur.
 
-Varsayılan kısayollar: `Ctrl+Alt+1..4` ön ayarlar, `Ctrl+Alt+↑` tam ekran, `Ctrl+Alt+↓` geri al, `Ctrl+Alt+A` tümüne uygula, `Ctrl+Alt+Z` otomatik mod, `Ctrl+Alt+S` Surround.
+Varsayılan kısayollar: `Ctrl+Shift+F1..F4` ön ayarlar, `Ctrl+Shift+F5` tam ekran, `F6` geri al, `F7` tümüne uygula, `F8` otomatik mod, `F9` Surround.
+`Ctrl+Alt` birleşimleri bilerek kullanılmaz: Windows'ta **Ctrl+Alt = AltGr**, bu yüzden `#`, `$`, `@`, `ß` gibi karakterlerin yazılmasını engeller. Ayarlardan Ctrl+Alt girilemez; eski sürümlerden kalan Ctrl+Alt kısayolları ilk açılışta otomatik `Ctrl+Shift+...` olarak çevrilir.
 
 ## Derleme
 Ek kurulum gerekmez; Windows'un hazır gelen .NET Framework 4 derleyicisi (`csc.exe`) kullanılır. Kod C# 5 uyumludur (`?.`, string interpolation vb. yok).

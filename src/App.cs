@@ -48,6 +48,7 @@ namespace ResizeBadger
             tray.DoubleClick += delegate { ShowSettings(0); };
             SystemEvents.UserPreferenceChanged += OnSystemTheme;
             Rebuild();
+            if (Cfg.Migrated) tray.ShowBalloonTip(8000, "Resize Badger", L.T("msg.hotkeysMigrated"), ToolTipIcon.Info);
         }
 
         // Windows teması / vurgu rengi değişince (tema "Windows teması" ise) uygulamayı da güncelle

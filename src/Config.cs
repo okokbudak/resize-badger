@@ -75,19 +75,48 @@ namespace ResizeBadger
         public Config()
         {
             path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.ini");
-            Hot["fill"] = "Ctrl+Alt+Up";
-            Hot["restore"] = "Ctrl+Alt+Down";
-            Hot["all"] = "Ctrl+Alt+A";
-            Hot["auto"] = "Ctrl+Alt+Z";
-            Hot["surround"] = "Ctrl+Alt+S";
+            // Ctrl+Alt = AltGr (Türkçe/Almanca/İspanyolca... klavyelerde #, $, @, ß gibi karakterler): varsayılanlar Ctrl+Alt kullanmaz
+            Hot["fill"] = "Ctrl+Shift+F5";
+            Hot["restore"] = "Ctrl+Shift+F6";
+            Hot["all"] = "Ctrl+Shift+F7";
+            Hot["auto"] = "Ctrl+Shift+F8";
+            Hot["surround"] = "Ctrl+Shift+F9";
             Load();
             if (Presets.Count == 0)
             {
-                Presets.Add(Preset.Make("Full HD", 1920, 1080, 0, 0, true, false, "Ctrl+Alt+1"));
-                Presets.Add(Preset.Make("2K", 2560, 1440, 0, 0, true, false, "Ctrl+Alt+2"));
-                Presets.Add(Preset.Make("Triple 5760x1080", 5760, 1080, SystemInformation.VirtualScreen.Left, SystemInformation.VirtualScreen.Top, false, true, "Ctrl+Alt+3"));
-                Presets.Add(Preset.Make("720p", 1280, 720, 0, 0, true, false, "Ctrl+Alt+4"));
+                Presets.Add(Preset.Make("Full HD", 1920, 1080, 0, 0, true, false, "Ctrl+Shift+F1"));
+                Presets.Add(Preset.Make("2K", 2560, 1440, 0, 0, true, false, "Ctrl+Shift+F2"));
+                Presets.Add(Preset.Make("Triple 5760x1080", 5760, 1080, SystemInformation.VirtualScreen.Left, SystemInformation.VirtualScreen.Top, false, true, "Ctrl+Shift+F3"));
+                Presets.Add(Preset.Make("720p", 1280, 720, 0, 0, true, false, "Ctrl+Shift+F4"));
             }
+            // Eski sürümlerde kaydedilmiş Ctrl+Alt kısayollarını AltGr ile çakışmayanlara çevir
+            foreach (string a in new List<string>(Hot.Keys)) { string n = NoAltGr(Hot[a]); if (n != Hot[a]) { Hot[a] = n; Migrated = true; } }
+            foreach (Preset pr in Presets) { string n = NoAltGr(pr.Hotkey); if (n != pr.Hotkey) { pr.Hotkey = n; Migrated = true; } }
+            if (Migrated) Save();
+        }
+
+        public bool Migrated;   // true: eski Ctrl+Alt kısayolları otomatik değiştirildi (kullanıcıya haber verilir)
+
+        static readonly Dictionary<string, string> OldDefaults = new Dictionary<string, string> {
+            { "Ctrl+Alt+Up", "Ctrl+Shift+F5" }, { "Ctrl+Alt+Down", "Ctrl+Shift+F6" }, { "Ctrl+Alt+A", "Ctrl+Shift+F7" },
+            { "Ctrl+Alt+Z", "Ctrl+Shift+F8" }, { "Ctrl+Alt+S", "Ctrl+Shift+F9" },
+            { "Ctrl+Alt+1", "Ctrl+Shift+F1" }, { "Ctrl+Alt+2", "Ctrl+Shift+F2" }, { "Ctrl+Alt+3", "Ctrl+Shift+F3" }, { "Ctrl+Alt+4", "Ctrl+Shift+F4" } };
+
+        // Ctrl+Alt (Win yok) birleşimi AltGr ile aynıdır: bu tuşla yazılan karakterler çalışmaz
+        public static bool IsAltGr(string hk)
+        {
+            if (string.IsNullOrEmpty(hk)) return false;
+            string[] t = hk.Split('+'); bool ctrl = false, alt = false, win = false;
+            for (int i = 0; i < t.Length - 1; i++) { string s = t[i].Trim(); if (s == "Ctrl") ctrl = true; else if (s == "Alt") alt = true; else if (s == "Win") win = true; }
+            return ctrl && alt && !win;
+        }
+
+        public static string NoAltGr(string hk)
+        {
+            if (!IsAltGr(hk)) return hk;
+            string m; if (OldDefaults.TryGetValue(hk, out m)) return m;
+            string[] t = hk.Split('+');
+            return "Ctrl+Shift+" + t[t.Length - 1].Trim();     // özel Ctrl+Alt+X -> Ctrl+Shift+X
         }
 
         void Load()

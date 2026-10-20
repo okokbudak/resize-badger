@@ -150,7 +150,7 @@ namespace ResizeBadger
         TextBox HotBox(Control parent, int actionIndex, int x, int y, int w, string value)
         {
             TextBox b = new TextBox(); b.ReadOnly = true; b.Text = value; b.SetBounds(x, y, w, 28); b.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            b.KeyDown += delegate(object s, KeyEventArgs e) { string v = KeyText(e); if (v != null) ((TextBox)s).Text = v; };
+            b.KeyDown += delegate(object s, KeyEventArgs e) { CaptureInto((TextBox)s, e); };
             parent.Controls.Add(b); if (actionIndex >= 0) hotBoxes[actionIndex] = b; return b;
         }
         Button Btn(Control parent, string text, int x, int y, int w, bool primary)
@@ -165,6 +165,7 @@ namespace ResizeBadger
             Keys k = e.KeyCode;
             if (k == Keys.ControlKey || k == Keys.ShiftKey || k == Keys.Menu || k == Keys.LWin || k == Keys.RWin) return null;
             if (k == Keys.Delete || k == Keys.Back || k == Keys.Escape) return "";
+            if (e.Control && e.Alt) { altGrBlocked = true; return null; }   // Ctrl+Alt = AltGr
             if (!e.Control && !e.Alt && !e.Shift) return null;
             string name = k.ToString();
             if (name.Length == 2 && name[0] == 'D' && char.IsDigit(name[1])) name = name.Substring(1);
@@ -255,7 +256,17 @@ namespace ResizeBadger
             tb.KeyDown -= HotCellKey;
             if (grid.CurrentCell.ColumnIndex == HotCol) tb.KeyDown += HotCellKey;
         }
-        void HotCellKey(object sender, KeyEventArgs e) { string v = KeyText(e); if (v != null) ((TextBox)sender).Text = v; }
+        void HotCellKey(object sender, KeyEventArgs e) { CaptureInto((TextBox)sender, e); }
+
+        // Kısayol kutusuna tuş birleşimini yazar; Ctrl+Alt (= AltGr) reddedilir ve nedeni gösterilir
+        static bool altGrBlocked;
+        readonly ToolTip tip = new ToolTip();
+        void CaptureInto(TextBox tb, KeyEventArgs e)
+        {
+            string v = KeyText(e);
+            if (altGrBlocked) { altGrBlocked = false; tip.Show(L.T("hk.altgr"), tb, 0, tb.Height + 4, 5000); return; }
+            if (v != null) tb.Text = v;
+        }
 
         // ---------------------------------------------------------------- 2. Program kuralları
         Panel BuildRulesPage()
