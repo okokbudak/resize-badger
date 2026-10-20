@@ -7,7 +7,7 @@ namespace ResizeBadger
 {
     static class Ver
     {
-        public const string V = "1.1.0";
+        public const string V = "1.0.0";
         public const string Repo = "github.com/okokbudak/resize-badger";
     }
 
