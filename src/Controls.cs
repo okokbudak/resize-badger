@@ -69,6 +69,53 @@ namespace ResizeBadger
         }
     }
 
+    // Bezel düzeltme şeması: ekranlar yan yana, aralarında gizli piksel boşluğu (boşluk genişliği orantılı çizilir)
+    class MonitorStrip : Control
+    {
+        public int Count = 3;
+        public int[] Gaps = new int[0];
+
+        public MonitorStrip()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Height = 100;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics; Palette p = Theme.P;
+            g.Clear(Parent != null ? Parent.BackColor : p.Surface);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int n = Math.Max(2, Count);
+            float[] gw = new float[n - 1]; float gsum = 0;
+            for (int i = 0; i < n - 1; i++)
+            {
+                int gp = i < Gaps.Length ? Gaps[i] : 0;
+                gw[i] = 16 + Math.Min(gp / 3f, 56f);
+                gsum += gw[i];
+            }
+            float mw = Math.Max(30f, (Width - 4 - gsum) / n), mh = Height - 30, x = 2;
+            for (int i = 0; i < n; i++)
+            {
+                Rectangle r = Rectangle.Round(new RectangleF(x, 4, mw, mh));
+                using (GraphicsPath path = Gfx.Round(r, 6))
+                using (SolidBrush b = new SolidBrush(p.Field))
+                using (Pen pen = new Pen(p.Dim, 2f)) { g.FillPath(b, path); g.DrawPath(pen, path); }
+                TextRenderer.DrawText(g, (i + 1).ToString(), Theme.H2, r, p.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                x += mw;
+                if (i < n - 1)
+                {
+                    RectangleF gr = new RectangleF(x, 4, gw[i], mh);       // çerçevenin arkasında kalan (gizli) pikseller
+                    using (HatchBrush hb = new HatchBrush(HatchStyle.WideUpwardDiagonal, Color.FromArgb(120, p.Accent), Color.Transparent)) g.FillRectangle(hb, gr);
+                    int gp = i < Gaps.Length ? Gaps[i] : 0;
+                    TextRenderer.DrawText(g, gp + " px", Theme.Small, Rectangle.Round(new RectangleF(x - 24, mh + 8, gw[i] + 48, 18)), gp > 0 ? p.Accent : p.Dim,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                    x += gw[i];
+                }
+            }
+        }
+    }
+
     // Kaydırılan sayfa: WS_EX_COMPOSITED ile tüm çocuklar çift tamponlu çizilir (kaydırırken artık / üst üste binme olmaz)
     class Page : Panel
     {

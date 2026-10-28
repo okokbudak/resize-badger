@@ -20,7 +20,8 @@ namespace ResizeBadger
         DataGridView grid, ruleGrid; DataGridViewComboBoxColumn ruleCombo;
         readonly TextBox[] hotBoxes = new TextBox[Config.Actions.Length];
         ComboBox autoBox, langBox, themeBox; Switch autoSw, startupSw, surConfirm;
-        TextBox excl; NumericUpDown surPrimary, bezelX, bezelY; Label surStatus, surMsg;
+        TextBox excl; NumericUpDown surPrimary; Label surStatus, surMsg;
+        NumericUpDown[] gapBoxes = new NumericUpDown[0]; MonitorStrip strip;
         const int HotCol = 8;                    // ön ayar tablosunda kısayol sütunu
         const int ContentW = 810, ContentH = 656; // sağ alan (pencere 1040x720 - yan menü 230 - alt çubuk 64)
 
@@ -376,22 +377,41 @@ namespace ResizeBadger
             y += 290 + 16;
 
             // Bezel düzeltme
-            Card c3 = NewCard(p, y, 306);
+            // NVIDIA uygulamasındaki gibi: her ekran çifti için ayrı boşluk + ekranların küçük şeması
+            int n = Surround.DisplayCount();
+            Card c3 = NewCard(p, y, 400);
             Lbl(c3, L.T("sur.bezel"), 20, 16, 0, Theme.H2, null);
-            Lbl(c3, L.T("sur.bezelH"), 20, 60, CW - 150, null, null);
-            bezelX = new NumericUpDown(); bezelX.Minimum = 0; bezelX.Maximum = 1000; bezelX.Value = Math.Max(0, Math.Min(1000, cfg.BezelX));
-            bezelX.SetBounds(CW - 110, 56, 90, 28); bezelX.Anchor = AnchorStyles.Top | AnchorStyles.Right; c3.Controls.Add(bezelX);
-            Lbl(c3, L.T("sur.bezelV"), 20, 102, CW - 150, null, null);
-            bezelY = new NumericUpDown(); bezelY.Minimum = 0; bezelY.Maximum = 1000; bezelY.Value = Math.Max(0, Math.Min(1000, cfg.BezelY));
-            bezelY.SetBounds(CW - 110, 98, 90, 28); bezelY.Anchor = AnchorStyles.Top | AnchorStyles.Right; c3.Controls.Add(bezelY);
-            Button ba = Btn(c3, L.T("sur.bezelApply"), 20, 148, 180, true);
-            ba.Click += delegate { if (app != null) app.SurroundBezelApply((int)bezelX.Value, (int)bezelY.Value); RefreshSurround(); };
-            Label bh = Lbl(c3, L.T("sur.bezelHint"), 20, 198, CW - 40, Theme.Small, "dim"); bh.Height = 96;
-            y += 306 + 16;
+            strip = new MonitorStrip(); strip.Count = n; strip.SetBounds(20, 52, CW - 40, 100); strip.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            c3.Controls.Add(strip);
+            gapBoxes = new NumericUpDown[n - 1];
+            int[] init = cfg.Bezel ?? Surround.CurrentGaps(n);     // hiç ayarlanmadıysa şu anki (ör. NVIDIA uygulamasındaki) değerler
+            int ry = 170;
+            for (int i = 0; i < n - 1; i++)
+            {
+                Lbl(c3, L.F("sur.bezelGap", i + 1, i + 2), 20, ry + 4, CW - 150, null, null);
+                NumericUpDown nb = new NumericUpDown(); nb.Minimum = 0; nb.Maximum = 1000;
+                nb.Value = i < init.Length ? Math.Max(0, Math.Min(1000, init[i])) : 0;
+                nb.SetBounds(CW - 110, ry, 90, 28); nb.Anchor = AnchorStyles.Top | AnchorStyles.Right; c3.Controls.Add(nb);
+                nb.ValueChanged += delegate { strip.Gaps = GapValues(); strip.Invalidate(); };
+                gapBoxes[i] = nb; ry += 42;
+            }
+            strip.Gaps = GapValues();
+            Button ba = Btn(c3, L.T("sur.bezelApply"), 20, ry + 8, 180, true);
+            ba.Click += delegate { if (app != null) app.SurroundBezelApply(GapValues()); RefreshSurround(); };
+            Label bh = Lbl(c3, L.T("sur.bezelHint"), 20, ry + 58, CW - 40, Theme.Small, "dim"); bh.Height = 96;
+            c3.Height = ry + 170;
+            y += c3.Height + 16;
 
             Label note = Lbl(p, L.T("sur.note"), PAD + 2, y, CW - 4, Theme.Small, "dim"); note.Height = 80;
             p.AutoScrollMinSize = new Size(0, y + 100);
             return p;
+        }
+
+        int[] GapValues()
+        {
+            int[] v = new int[gapBoxes.Length];
+            for (int i = 0; i < v.Length; i++) v[i] = (int)gapBoxes[i].Value;
+            return v;
         }
 
         public void RefreshSurround() { surStatus.Text = Surround.StatusText(); }
@@ -475,7 +495,7 @@ namespace ResizeBadger
             cfg.Auto = autoSw.Checked;
             cfg.SurroundConfirm = surConfirm.Checked;
             cfg.SurroundPrimary = (int)surPrimary.Value;
-            cfg.BezelX = (int)bezelX.Value; cfg.BezelY = (int)bezelY.Value;
+            cfg.Bezel = GapValues();
             cfg.Lang = langBox.SelectedIndex == 0 ? "auto" : L.Codes[langBox.SelectedIndex - 1];
             cfg.Theme = ThemeCode();
             App.SetStartup(startupSw.Checked);

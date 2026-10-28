@@ -64,7 +64,8 @@ namespace ResizeBadger
         public string Theme = "system";   // system | light | dark
         public bool SurroundConfirm = true;
         public int SurroundPrimary = 2;   // Surround kapanınca ana ekran olacak ekran (soldan sıra)
-        public int BezelX, BezelY;        // Surround bezel düzeltme: ekranlar arası yatay / dikey piksel payı (0 = kapalı)
+        public int[] Bezel = null;        // Surround bezel düzeltme: soldan sağa her ekran çifti arasındaki piksel boşluğu (0 = kapalı).
+                                          // null = uygulamada hiç ayarlanmadı: NVIDIA uygulamasındaki / profildeki mevcut değerlere dokunulmaz.
 
         public Dictionary<string, string> Hot = new Dictionary<string, string>();
         public List<Preset> Presets = new List<Preset>();
@@ -137,8 +138,12 @@ namespace ResizeBadger
                     else if (k == "theme") Theme = v;
                     else if (k == "sconfirm") SurroundConfirm = v == "1";
                     else if (k == "sprimary") int.TryParse(v, out SurroundPrimary);
-                    else if (k == "bezelx") int.TryParse(v, out BezelX);
-                    else if (k == "bezely") int.TryParse(v, out BezelY);
+                    else if (k == "bezel")
+                    {
+                        List<int> g = new List<int>();
+                        foreach (string part in v.Split(',')) { int n; if (int.TryParse(part.Trim(), out n)) g.Add(Math.Max(0, n)); }
+                        Bezel = g.ToArray();
+                    }
                     else if (k == "rule") { Rule r = Rule.Parse(v); if (r != null) Rules.Add(r); }
                     else if (k == "preset") { Preset p = Preset.Parse(v); if (p != null) Presets.Add(p); }
                     else if (k.StartsWith("hk_")) Hot[k.Substring(3)] = v;
@@ -159,8 +164,11 @@ namespace ResizeBadger
                 l.Add("theme=" + Theme);
                 l.Add("sconfirm=" + (SurroundConfirm ? "1" : "0"));
                 l.Add("sprimary=" + SurroundPrimary);
-                l.Add("bezelx=" + BezelX);
-                l.Add("bezely=" + BezelY);
+                if (Bezel != null)
+                {
+                    string[] bz = new string[Bezel.Length]; for (int i = 0; i < bz.Length; i++) bz[i] = Bezel[i].ToString();
+                    l.Add("bezel=" + string.Join(",", bz));
+                }
                 foreach (Rule r in Rules) l.Add("rule=" + r.Serialize());
                 foreach (string a in Actions) l.Add("hk_" + a + "=" + Hot[a]);
                 foreach (Preset p in Presets) l.Add("preset=" + p.Serialize());

@@ -41,7 +41,7 @@ namespace ResizeBadger
             Theme.Mode = Cfg.Theme; Theme.Reload();
             Wm = new WindowManager(Cfg);
             Surround.PrimaryAfterOff = Cfg.SurroundPrimary;
-            Surround.BezelX = Cfg.BezelX; Surround.BezelY = Cfg.BezelY;
+            Surround.Bezel = Cfg.Bezel;
             TrayIcon = LoadIcon();
             hw = new HotWindow(); hw.Pressed += OnHotkey;
 
@@ -102,7 +102,7 @@ namespace ResizeBadger
             L.Set(Cfg.Lang);
             Theme.Mode = Cfg.Theme; Theme.Reload();
             Surround.PrimaryAfterOff = Cfg.SurroundPrimary;
-            Surround.BezelX = Cfg.BezelX; Surround.BezelY = Cfg.BezelY;
+            Surround.Bezel = Cfg.Bezel;
             Wm.ReloadExclude();
             Rebuild();
             Wm.ApplyRulesToExisting();
@@ -175,32 +175,33 @@ namespace ResizeBadger
         }
 
         // Bezel düzeltmeyi (Surround açıksa) hemen dener; onay istenirse 15 sn içinde onaylanmazsa eski değere döner
-        public void SurroundBezelApply(int x, int y)
+        public void SurroundBezelApply(int[] gaps)
         {
-            int ox = Cfg.BezelX, oy = Cfg.BezelY;
-            Surround.BezelX = x; Surround.BezelY = y;
+            int[] prev = Surround.CurrentGaps(Surround.DisplayCount());   // şu an gerçekte uygulanan değerler (geri alma için)
             if (!Surround.IsOn())
             {
-                Cfg.BezelX = x; Cfg.BezelY = y; Cfg.Save();
+                Cfg.Bezel = gaps; Surround.Bezel = gaps; Cfg.Save();
                 Info(L.T("msg.bezel.saved")); return;
             }
+            Surround.Bezel = gaps;
             string err;
             Cursor old = Cursor.Current; Cursor.Current = Cursors.WaitCursor;
             try { err = Surround.ApplyBezelNow(); } finally { Cursor.Current = old; }
             if (err != null)
             {
-                Surround.BezelX = ox; Surround.BezelY = oy;
+                Surround.Bezel = Cfg.Bezel;
                 tray.ShowBalloonTip(5000, "NVIDIA Surround", err, ToolTipIcon.Warning);
                 return;
             }
             if (Cfg.SurroundConfirm && !ConfirmSurround(L.T("msg.bezel.applied")))
             {
-                Surround.BezelX = ox; Surround.BezelY = oy;
+                Surround.Bezel = prev;                       // önceki gerçek değerlere dön
                 string back = Surround.ApplyBezelNow();
+                Surround.Bezel = Cfg.Bezel;
                 tray.ShowBalloonTip(3000, "NVIDIA Surround", back == null ? L.T("msg.sur.reverted") : L.F("msg.sur.revertFail", back), ToolTipIcon.Info);
                 return;
             }
-            Cfg.BezelX = x; Cfg.BezelY = y; Cfg.Save();
+            Cfg.Bezel = gaps; Cfg.Save();
             Info(L.T("msg.bezel.applied"));
         }
 

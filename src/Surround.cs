@@ -134,10 +134,14 @@ namespace ResizeBadger
             foreach (SurroundGrid g in gs)
                 if (g.IsSurround)
                 {
-                    int ox = g.Count > 1 ? Get(g.Raw, HDR + DSZ + 8) : 0;                          // 2. ekranın yatay payı (- = bezel)
-                    int oy = g.Count > g.Cols ? Get(g.Raw, HDR + g.Cols * DSZ + 12) : 0;
-                    string s = L.F("sur.state.on", g.Cols, g.Rows, g.Count, g.W, g.H, g.Hz, g.W * g.Cols - ox * (g.Cols - 1), g.H * g.Rows - oy * (g.Rows - 1));
-                    return (ox != 0 || oy != 0) ? s + L.F("sur.state.bezel", (ox != 0 ? -ox : -oy)) : s;
+                    int total = g.W * g.Cols; bool any = false; List<string> gaps = new List<string>();
+                    for (int c = 1; c < g.Cols && c < g.Count; c++)       // ilk satırdaki her ekran çifti arası (- değer = bezel boşluğu)
+                    {
+                        int gap = -Get(g.Raw, HDR + c * DSZ + 8);
+                        total += gap; gaps.Add(gap.ToString()); if (gap != 0) any = true;
+                    }
+                    string s = L.F("sur.state.on", g.Cols, g.Rows, g.Count, g.W, g.H, g.Hz, total, g.H * g.Rows);
+                    return any ? s + L.F("sur.state.bezel", string.Join(" / ", gaps.ToArray())) : s;
                 }
             return L.F("sur.state.off", gs.Count);
         }
@@ -171,19 +175,58 @@ namespace ResizeBadger
         // NV_MOSAIC_GRID_TOPO_DISPLAY.overlapX/Y: ekran, önceki ekranla (aynı satırda) bu kadar piksel örtüşür (+) ya da bu kadar piksel
         // aralıklıdır (-). Bezel düzeltme = eksi değer: çerçevenin arkasında kalan pikseller sayılır. Satırın ilk ekranı 0 olmalı.
         // Izgara bayrağı bit 0 = ApplyWithBezelCorrectedResolution.
-        public static int BezelX, BezelY;   // 0 = kapalı
+        // Soldan sağa her ekran çifti için ayrı boşluk: Bezel[0] = 1. ile 2. ekran arası, Bezel[1] = 2. ile 3. ekran arası... (0 = kapalı)
+        public static int[] Bezel = null;   // null = dokunma
+
+        static int Gap(int i) { return (Bezel != null && i >= 0 && i < Bezel.Length) ? Math.Max(0, Bezel[i]) : 0; }
+
+        // Mevcut (etkin Surround'daki, yoksa profildeki) ekran çifti boşlukları; ayar ekranının başlangıç değerleri için
+        public static int[] CurrentGaps(int n)
+        {
+            int[] g = new int[Math.Max(0, n - 1)];
+            byte[] raw = null;
+            try
+            {
+                if (Init() == null) { SurroundGrid a = Active(); if (a != null) raw = a.Raw; }
+                if (raw == null && HasProfile) { byte[] b = File.ReadAllBytes(ProfilePath); if (b.Length == GRID) raw = b; }
+            }
+            catch { }
+            if (raw != null)
+            {
+                int cols = Math.Max(1, Get(raw, 8));
+                for (int i = 0; i < g.Length && i + 1 < cols; i++) g[i] = Math.Max(0, -Get(raw, HDR + (i + 1) * DSZ + 8));
+            }
+            return g;
+        }
 
         static void ApplyBezel(byte[] raw)
         {
+            if (Bezel == null) return;      // uygulamada ayarlanmadı: ızgaradaki mevcut değerler (NVIDIA uygulaması / profil) korunur
             int cols = Math.Max(1, Get(raw, 8)), count = Math.Min(Get(raw, 12), 64);
+            bool any = false;
             for (int d = 0; d < count; d++)
             {
-                int col = d % cols, row = d / cols;
-                Put(raw, HDR + d * DSZ + 8, col > 0 ? -Math.Max(0, BezelX) : 0);
-                Put(raw, HDR + d * DSZ + 12, row > 0 ? -Math.Max(0, BezelY) : 0);
+                int col = d % cols, gap = col > 0 ? Gap(col - 1) : 0;
+                if (gap > 0) any = true;
+                Put(raw, HDR + d * DSZ + 8, -gap);     // yatay: önceki ekranla arasındaki boşluk (satırın ilk ekranı 0)
+                Put(raw, HDR + d * DSZ + 12, 0);       // dikey düzeltme desteklenmiyor (tek satırlı Surround)
             }
             int flags = Get(raw, 16);
-            Put(raw, 16, (BezelX > 0 || BezelY > 0) ? (flags | 1) : (flags & ~1));
+            Put(raw, 16, any ? (flags | 1) : (flags & ~1));
+        }
+
+        // Ayar ekranı için: Surround'daki (ya da kurulacak) ekran sayısı
+        public static int DisplayCount()
+        {
+            try
+            {
+                if (Init() != null) return 3;
+                SurroundGrid a = Active();
+                if (a != null) return Math.Max(2, Math.Min(a.Count, 8));
+                if (HasProfile) { byte[] b = File.ReadAllBytes(ProfilePath); if (b.Length == GRID) return Math.Max(2, Math.Min(Get(b, 12), 8)); }
+                return Math.Max(2, Math.Min(Grids().Count, 8));
+            }
+            catch { return 3; }
         }
 
         // Sürücüye sorar: bu ızgara geçerli mi? (null = geçerli, değilse hata metni). Ekran ayarına dokunmaz.
