@@ -133,7 +133,12 @@ namespace ResizeBadger
             List<SurroundGrid> gs = Grids();
             foreach (SurroundGrid g in gs)
                 if (g.IsSurround)
-                    return L.F("sur.state.on", g.Cols, g.Rows, g.Count, g.W, g.H, g.Hz, g.W * g.Cols, g.H * g.Rows);
+                {
+                    int ox = g.Count > 1 ? Get(g.Raw, HDR + DSZ + 8) : 0;                          // 2. ekranın yatay payı (- = bezel)
+                    int oy = g.Count > g.Cols ? Get(g.Raw, HDR + g.Cols * DSZ + 12) : 0;
+                    string s = L.F("sur.state.on", g.Cols, g.Rows, g.Count, g.W, g.H, g.Hz, g.W * g.Cols - ox * (g.Cols - 1), g.H * g.Rows - oy * (g.Rows - 1));
+                    return (ox != 0 || oy != 0) ? s + L.F("sur.state.bezel", (ox != 0 ? -ox : -oy)) : s;
+                }
             return L.F("sur.state.off", gs.Count);
         }
 
@@ -162,7 +167,64 @@ namespace ResizeBadger
         public static string Debug = "";
         public static bool IsOn() { return Init() == null && Active() != null; }
 
+        // ---------------------------------------------------------------- bezel düzeltme
+        // NV_MOSAIC_GRID_TOPO_DISPLAY.overlapX/Y: ekran, önceki ekranla (aynı satırda) bu kadar piksel örtüşür (+) ya da bu kadar piksel
+        // aralıklıdır (-). Bezel düzeltme = eksi değer: çerçevenin arkasında kalan pikseller sayılır. Satırın ilk ekranı 0 olmalı.
+        // Izgara bayrağı bit 0 = ApplyWithBezelCorrectedResolution.
+        public static int BezelX, BezelY;   // 0 = kapalı
+
+        static void ApplyBezel(byte[] raw)
+        {
+            int cols = Math.Max(1, Get(raw, 8)), count = Math.Min(Get(raw, 12), 64);
+            for (int d = 0; d < count; d++)
+            {
+                int col = d % cols, row = d / cols;
+                Put(raw, HDR + d * DSZ + 8, col > 0 ? -Math.Max(0, BezelX) : 0);
+                Put(raw, HDR + d * DSZ + 12, row > 0 ? -Math.Max(0, BezelY) : 0);
+            }
+            int flags = Get(raw, 16);
+            Put(raw, 16, (BezelX > 0 || BezelY > 0) ? (flags | 1) : (flags & ~1));
+        }
+
+        // Sürücüye sorar: bu ızgara geçerli mi? (null = geçerli, değilse hata metni). Ekran ayarına dokunmaz.
+        static string Validate(byte[] raw)
+        {
+            if (fValidate == null) return null;
+            IntPtr g = ToNative(new List<byte[]>(new byte[][] { raw }));
+            int size = 16 + 128 * 16;
+            IntPtr st = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.Copy(new byte[size], 0, st, size);
+                Marshal.WriteInt32(st, 0, size | (1 << 16));
+                int rc = fValidate(FLAG_CURRENT_GPU, g, st, 1), e = Marshal.ReadInt32(st, 4);
+                return (rc != 0 || e != 0) ? L.F("sur.err.bezel", rc, e) : null;
+            }
+            finally { Marshal.FreeHGlobal(g); Marshal.FreeHGlobal(st); }
+        }
+
+        // Surround açıkken geçerli bezel değerlerini hemen uygular (null = başarılı / Surround kapalı ise bir sonraki açılışta kullanılır)
+        public static string ApplyBezelNow()
+        {
+            string err = Init(); if (err != null) return err;
+            SurroundGrid a = Active();
+            if (a == null) return null;
+            byte[] raw = (byte[])a.Raw.Clone(); ApplyBezel(raw);
+            err = Validate(raw); if (err != null) return err;
+            int rc = SetGrids(new List<byte[]>(new byte[][] { raw }));
+            if (rc != 0) return L.F("sur.err.set", rc);
+            Thread.Sleep(2500);       // sürücü yeni topolojiyi oturtsun
+            return Active() != null ? null : L.T("sur.err.timeout");
+        }
+
         static byte[] BuildGrid(out string err)
+        {
+            byte[] g = BuildGridRaw(out err);
+            if (g != null) ApplyBezel(g);
+            return g;
+        }
+
+        static byte[] BuildGridRaw(out string err)
         {
             err = null;
             if (HasProfile)

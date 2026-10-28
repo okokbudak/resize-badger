@@ -41,6 +41,7 @@ namespace ResizeBadger
             Theme.Mode = Cfg.Theme; Theme.Reload();
             Wm = new WindowManager(Cfg);
             Surround.PrimaryAfterOff = Cfg.SurroundPrimary;
+            Surround.BezelX = Cfg.BezelX; Surround.BezelY = Cfg.BezelY;
             TrayIcon = LoadIcon();
             hw = new HotWindow(); hw.Pressed += OnHotkey;
 
@@ -101,6 +102,7 @@ namespace ResizeBadger
             L.Set(Cfg.Lang);
             Theme.Mode = Cfg.Theme; Theme.Reload();
             Surround.PrimaryAfterOff = Cfg.SurroundPrimary;
+            Surround.BezelX = Cfg.BezelX; Surround.BezelY = Cfg.BezelY;
             Wm.ReloadExclude();
             Rebuild();
             Wm.ApplyRulesToExisting();
@@ -163,7 +165,7 @@ namespace ResizeBadger
                 tray.ShowBalloonTip(4000, "NVIDIA Surround", err, ToolTipIcon.Warning);
                 return;
             }
-            if (Cfg.SurroundConfirm && !ConfirmSurround(on))
+            if (Cfg.SurroundConfirm && !ConfirmSurround(L.T(on ? "msg.sur.on" : "msg.sur.off")))
             {
                 string back = Surround.Set(!on);
                 tray.ShowBalloonTip(3000, "NVIDIA Surround", back == null ? L.T("msg.sur.reverted") : L.F("msg.sur.revertFail", back), ToolTipIcon.Info);
@@ -172,8 +174,38 @@ namespace ResizeBadger
             tray.ShowBalloonTip(1500, "NVIDIA Surround", L.T(on ? "msg.sur.on" : "msg.sur.off"), ToolTipIcon.None);
         }
 
+        // Bezel düzeltmeyi (Surround açıksa) hemen dener; onay istenirse 15 sn içinde onaylanmazsa eski değere döner
+        public void SurroundBezelApply(int x, int y)
+        {
+            int ox = Cfg.BezelX, oy = Cfg.BezelY;
+            Surround.BezelX = x; Surround.BezelY = y;
+            if (!Surround.IsOn())
+            {
+                Cfg.BezelX = x; Cfg.BezelY = y; Cfg.Save();
+                Info(L.T("msg.bezel.saved")); return;
+            }
+            string err;
+            Cursor old = Cursor.Current; Cursor.Current = Cursors.WaitCursor;
+            try { err = Surround.ApplyBezelNow(); } finally { Cursor.Current = old; }
+            if (err != null)
+            {
+                Surround.BezelX = ox; Surround.BezelY = oy;
+                tray.ShowBalloonTip(5000, "NVIDIA Surround", err, ToolTipIcon.Warning);
+                return;
+            }
+            if (Cfg.SurroundConfirm && !ConfirmSurround(L.T("msg.bezel.applied")))
+            {
+                Surround.BezelX = ox; Surround.BezelY = oy;
+                string back = Surround.ApplyBezelNow();
+                tray.ShowBalloonTip(3000, "NVIDIA Surround", back == null ? L.T("msg.sur.reverted") : L.F("msg.sur.revertFail", back), ToolTipIcon.Info);
+                return;
+            }
+            Cfg.BezelX = x; Cfg.BezelY = y; Cfg.Save();
+            Info(L.T("msg.bezel.applied"));
+        }
+
         // 15 sn içinde "Tut" denmezse false (=geri al). Siyah ekranda kilitlenmeyi önler.
-        static bool ConfirmSurround(bool on)
+        static bool ConfirmSurround(string what)
         {
             using (Form f = new Form())
             {
@@ -187,7 +219,7 @@ namespace ResizeBadger
                 f.AcceptButton = keep;
                 Theme.Apply(f);
                 System.Windows.Forms.Timer t = new System.Windows.Forms.Timer(); t.Interval = 1000;
-                Action upd = delegate { l.Text = L.F("dlg.sur.msg", L.T(on ? "msg.sur.on" : "msg.sur.off"), left); };
+                Action upd = delegate { l.Text = L.F("dlg.sur.msg", what, left); };
                 upd();
                 t.Tick += delegate { left--; if (left <= 0) { t.Stop(); f.DialogResult = DialogResult.No; } else upd(); };
                 t.Start();
