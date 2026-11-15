@@ -190,7 +190,7 @@ namespace ResizeBadger
     class NavButton : Control
     {
         public string Glyph = "";
-        public bool Selected;
+        public bool Selected = false;
         bool hover;
         static readonly bool HasIcons = HasFont("Segoe MDL2 Assets");
         static bool HasFont(string n) { foreach (FontFamily f in FontFamily.Families) if (f.Name == n) return true; return false; }

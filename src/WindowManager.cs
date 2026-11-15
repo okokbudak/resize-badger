@@ -46,7 +46,7 @@ namespace ResizeBadger
         {
             if (hwnd == IntPtr.Zero || idObj != 0 || idChild != 0) return;
             if (ev == 0x0003 && IsManageable(hwnd)) LastWindow = hwnd;
-            bool wantRule = cfg.Rules.Count > 0 && !ruleDone.Contains(hwnd);
+            bool wantRule = HasRules && !ruleDone.Contains(hwnd);
             bool wantAuto = cfg.Auto && !autoDone.Contains(hwnd);
             if (!wantRule && !wantAuto) return;
             if (N.GetAncestor(hwnd, 2) != hwnd) return;   // yalnızca üst düzey pencereler
@@ -76,12 +76,26 @@ namespace ResizeBadger
             return n;
         }
 
+        // Program kuralı ya da (ön ayarı seçilmiş) Surround oyun kuralı var mı
+        bool HasRules
+        {
+            get
+            {
+                if (cfg.Rules.Count > 0) return true;
+                foreach (Rule g in cfg.SurroundGames) if (g.Enabled && g.Preset.Length > 0) return true;
+                return false;
+            }
+        }
+
         Rule FindRule(IntPtr h)
         {
-            if (cfg.Rules.Count == 0) return null;
+            if (!HasRules) return null;
             string n = ProcName(h);
             foreach (Rule r in cfg.Rules)
                 if (r.Enabled && string.Equals(r.Proc, n, StringComparison.OrdinalIgnoreCase)) return r;
+            // Surround oyun kuralları: ön ayar seçildiyse oyun penceresine uygulanır (boşsa pencereye dokunulmaz)
+            foreach (Rule g in cfg.SurroundGames)
+                if (g.Enabled && g.Preset.Length > 0 && string.Equals(g.Proc, n, StringComparison.OrdinalIgnoreCase)) return g;
             return null;
         }
 
@@ -119,7 +133,7 @@ namespace ResizeBadger
         // Kuralları kaydettikten sonra şu an açık olan pencerelere de uygula
         public void ApplyRulesToExisting()
         {
-            if (cfg.Rules.Count == 0) return;
+            if (!HasRules) return;
             List<IntPtr> list = new List<IntPtr>();
             N.EnumWindows(delegate(IntPtr h, IntPtr l) { if (FindRule(h) != null) list.Add(h); return true; }, IntPtr.Zero);
             foreach (IntPtr h in list) { ruleDone.Remove(h); TryRule(h); }

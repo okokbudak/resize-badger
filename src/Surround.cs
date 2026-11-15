@@ -42,6 +42,12 @@ namespace ResizeBadger
 
         static string ProfilePath { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "surround_profile.bin"); } }
         public static bool HasProfile { get { return File.Exists(ProfilePath); } }
+        public static byte[] ReadProfile() { try { return HasProfile ? File.ReadAllBytes(ProfilePath) : null; } catch { return null; } }
+        public static bool WriteProfile(byte[] b)
+        {
+            if (b == null || b.Length != GRID) return false;
+            try { File.WriteAllBytes(ProfilePath, b); return true; } catch { return false; }
+        }
 
         static T Fn<T>(uint id) where T : class
         {

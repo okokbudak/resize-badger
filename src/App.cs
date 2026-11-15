@@ -53,11 +53,63 @@ namespace ResizeBadger
             dispTimer = new System.Windows.Forms.Timer(); dispTimer.Interval = 2500; dispTimer.Tick += OnDisplayStable;
             themeTimer = new System.Windows.Forms.Timer(); themeTimer.Interval = 400; themeTimer.Tick += OnThemeStable;
             hw.Broadcast += OnBroadcast;
+            gameTimer = new System.Windows.Forms.Timer(); gameTimer.Interval = 2000; gameTimer.Tick += OnGameTick; gameTimer.Start();
             Rebuild();
             if (Cfg.Migrated) tray.ShowBalloonTip(8000, "Resize Badger", L.T("msg.hotkeysMigrated"), ToolTipIcon.Info);
         }
 
-        bool lastSurround; System.Windows.Forms.Timer dispTimer, themeTimer;
+        bool lastSurround; System.Windows.Forms.Timer dispTimer, themeTimer, gameTimer;
+
+        // ---- Oyun başlayınca otomatik Surround
+        bool gameRunning, gameOwnsSurround;   // gameOwnsSurround: Surround'u oyun yüzünden biz açtık (kapanınca biz kapatırız)
+
+        bool AnyGameRunning()
+        {
+            foreach (Rule g in Cfg.SurroundGames)
+            {
+                if (!g.Enabled) continue;
+                Process[] ps = null;
+                try { ps = Process.GetProcessesByName(g.Proc); } catch { }
+                if (ps == null) continue;
+                bool found = ps.Length > 0;
+                foreach (Process p in ps) p.Dispose();
+                if (found) return true;
+            }
+            return false;
+        }
+
+        void OnGameTick(object s, EventArgs e)
+        {
+            if (Cfg.SurroundGames.Count == 0 && !gameRunning) return;
+            bool now = AnyGameRunning();
+            if (now == gameRunning) return;
+            gameRunning = now;
+            if (now)
+            {
+                if (Surround.IsOn()) { gameOwnsSurround = false; Wm.ApplyRulesToExisting(); return; }     // zaten açık: dokunma, kapatma
+                gameTimer.Stop();                                              // Surround geçişi sırasında yeniden girmesin
+                try
+                {
+                    string err = Surround.Set(true);
+                    gameOwnsSurround = err == null;
+                    tray.ShowBalloonTip(2500, "NVIDIA Surround", err == null ? L.T("msg.sur.gameOn") : err, err == null ? ToolTipIcon.None : ToolTipIcon.Warning);
+                }
+                finally { gameTimer.Start(); }
+                Wm.ApplyRulesToExisting();                                     // oyun penceresi zaten açıldıysa ön ayarı şimdi uygula
+            }
+            else if (gameOwnsSurround)
+            {
+                gameOwnsSurround = false;
+                if (!Cfg.SurroundGameOff || !Surround.IsOn()) return;
+                gameTimer.Stop();
+                try
+                {
+                    string err = Surround.Set(false);
+                    tray.ShowBalloonTip(2500, "NVIDIA Surround", err == null ? L.T("msg.sur.gameOff") : err, err == null ? ToolTipIcon.None : ToolTipIcon.Warning);
+                }
+                finally { gameTimer.Start(); }
+            }
+        }
 
         // Gizli pencereye gelen Windows yayınları (UI iş parçacığında): ekran düzeni ve tema değişimi
         void OnBroadcast(int msg)
@@ -286,7 +338,7 @@ namespace ResizeBadger
 
         void Exit()
         {
-            dispTimer.Stop(); themeTimer.Stop();
+            dispTimer.Stop(); themeTimer.Stop(); gameTimer.Stop();
             Wm.StopHooks();
             for (int i = 1; i <= hotCount; i++) N.UnregisterHotKey(hw.Handle, i);
             tray.Visible = false; tray.Dispose();

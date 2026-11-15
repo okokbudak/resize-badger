@@ -4,7 +4,7 @@
 # Kullanım: ./build.sh [çıktı klasörü]   (varsayılan: Windows teslim klasörü)
 set -euo pipefail
 
-ROOT="/home/orhan/projects/resize-badger"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CSC="/mnt/c/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe"
 OUT_DIR="${1:-/mnt/d/OKWorks/Ai Projects/PC Tools/Resize Badger}"
 

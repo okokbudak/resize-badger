@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
 
@@ -17,9 +18,9 @@ namespace ResizeBadger
         bool saved; int curIdx;
 
         // sayfa denetimleri
-        DataGridView grid, ruleGrid; DataGridViewComboBoxColumn ruleCombo;
+        DataGridView grid, ruleGrid, gameGrid; DataGridViewComboBoxColumn ruleCombo, gameCombo;
         readonly TextBox[] hotBoxes = new TextBox[Config.Actions.Length];
-        ComboBox autoBox, langBox, themeBox; Switch autoSw, startupSw, surConfirm;
+        ComboBox autoBox, langBox, themeBox; Switch autoSw, startupSw, surConfirm, gameOffSw;
         TextBox excl; NumericUpDown surPrimary; Label surStatus, surMsg;
         NumericUpDown[] gapBoxes = new NumericUpDown[0]; MonitorStrip strip;
         const int HotCol = 8;                    // ön ayar tablosunda kısayol sütunu
@@ -402,9 +403,62 @@ namespace ResizeBadger
             c3.Height = ry + 170;
             y += c3.Height + 16;
 
+            // Oyun başlayınca otomatik Surround
+            Card c4 = NewCard(p, y, 470);
+            Lbl(c4, L.T("sur.games"), 20, 16, 0, Theme.H2, null);
+            Label gd = Lbl(c4, L.T("sur.gamesDesc"), 20, 48, CW - 40, Theme.Small, "dim"); gd.Height = 40;
+            gameGrid = NewGrid(c4, 20, 92, CW - 40, 200);
+            CheckCol(gameGrid, "col.enabled", 60); TextCol(gameGrid, "col.program", 220, true);
+            gameCombo = new DataGridViewComboBoxColumn(); gameCombo.HeaderText = L.T("sur.gamePreset"); gameCombo.Width = 250; gameCombo.FlatStyle = FlatStyle.Flat;
+            gameGrid.Columns.Add(gameCombo);
+            gameGrid.DataError += delegate(object s, DataGridViewDataErrorEventArgs e) { e.ThrowException = false; };
+            RefreshGameCombos();
+            foreach (Rule g in cfg.SurroundGames) AddGameRow(g.Proc, g.Preset, g.Enabled);
+            Button gp = Btn(c4, L.T("rules.pickRunning"), 20, 304, 250, false);
+            gp.Click += delegate { foreach (string pn in PickRunning()) AddGameIfNew(pn); };
+            Button gf = Btn(c4, L.T("rules.pickFile"), 282, 304, 210, false);
+            gf.Click += delegate
+            {
+                using (OpenFileDialog d = new OpenFileDialog())
+                {
+                    d.Title = L.T("sur.gameFileTitle"); d.Filter = L.T("rules.fileFilter") + " (*.exe)|*.exe";
+                    if (d.ShowDialog() == DialogResult.OK) AddGameIfNew(Path.GetFileNameWithoutExtension(d.FileName));
+                }
+            };
+            Button gdel = Btn(c4, L.T("btn.delete"), 504, 304, 110, false);
+            gdel.Click += delegate { foreach (DataGridViewRow r in new List<DataGridViewRow>(Sel(gameGrid))) gameGrid.Rows.Remove(r); };
+            gameOffSw = new Switch(); gameOffSw.Text = L.T("sur.gameOff"); gameOffSw.Checked = cfg.SurroundGameOff; gameOffSw.SetBounds(20, 356, CW - 40, 30); c4.Controls.Add(gameOffSw);
+            Label gn = Lbl(c4, L.T("sur.gamesNote"), 20, 396, CW - 40, Theme.Small, "dim"); gn.Height = 62;
+            y += 470 + 16;
+
             Label note = Lbl(p, L.T("sur.note"), PAD + 2, y, CW - 4, Theme.Small, "dim"); note.Height = 80;
             p.AutoScrollMinSize = new Size(0, y + 100);
             return p;
+        }
+
+        void RefreshGameCombos()
+        {
+            gameCombo.Items.Clear(); gameCombo.Items.Add(L.T("preset.none"));
+            foreach (DataGridViewRow r in grid.Rows)
+            {
+                object v = r.Cells[0].Value;
+                if (v != null && v.ToString().Trim().Length > 0 && !gameCombo.Items.Contains(v.ToString())) gameCombo.Items.Add(v.ToString());
+            }
+        }
+        void AddGameRow(string proc, string preset, bool enabled)
+        {
+            string shown = preset.Length == 0 ? L.T("preset.none") : preset;
+            if (!gameCombo.Items.Contains(shown)) gameCombo.Items.Add(shown);
+            gameGrid.Rows.Add(enabled, proc, shown);
+        }
+
+        void AddGameIfNew(string proc)
+        {
+            if (string.IsNullOrEmpty(proc)) return;
+            foreach (DataGridViewRow r in gameGrid.Rows)
+                if (string.Equals((r.Cells[1].Value ?? "").ToString(), proc, StringComparison.OrdinalIgnoreCase)) return;
+            AddGameRow(proc, "", true);
+            gameGrid.CurrentCell = gameGrid.Rows[gameGrid.Rows.Count - 1].Cells[1];
         }
 
         int[] GapValues()
@@ -447,13 +501,67 @@ namespace ResizeBadger
             Lbl(c2, L.T("gen.startupHint"), 20 + 54, 86, CW - 100, Theme.Small, "dim");
             y += 130 + 16;
 
-            Card c3 = NewCard(p, y, 110);
+            Card cb = NewCard(p, y, 170);
+            Lbl(cb, L.T("gen.backup"), 20, 16, 0, Theme.H2, null);
+            Button ex = Btn(cb, L.T("gen.export"), 20, 56, 230, false); ex.Click += delegate { ExportSettings(); };
+            Button im = Btn(cb, L.T("gen.import"), 262, 56, 230, false); im.Click += delegate { ImportSettings(); };
+            Label bn = Lbl(cb, L.T("gen.backupNote"), 20, 104, CW - 40, Theme.Small, "dim"); bn.Height = 56;
+            y += 170 + 16;
+
+            Card c3 = NewCard(p, y, 190);
             Lbl(c3, L.T("gen.about"), 20, 16, 0, Theme.H2, null);
             Lbl(c3, "Resize Badger  ·  " + L.F("gen.version", Ver.V), 20, 52, CW - 40, null, null);
             Lbl(c3, Ver.Repo, 20, 76, CW - 40, Theme.Small, "dim");
-            y += 110 + PAD;
+            Button upd = Btn(c3, L.T("gen.checkUpdate"), 20, 112, 230, false);
+            updMsg = Lbl(c3, "", 262, 118, CW - 282, null, "dim");
+            updOpen = Btn(c3, L.T("gen.openRelease"), 262, 112, 230, true); updOpen.Visible = false;
+            upd.Click += delegate
+            {
+                upd.Enabled = false; updOpen.Visible = false; updMsg.Text = L.T("gen.updChecking");
+                Updater.Check(delegate(string err, string ver, string url)
+                {
+                    if (IsDisposed) return;
+                    try { BeginInvoke((MethodInvoker)delegate
+                    {
+                        upd.Enabled = true;
+                        if (err != null) updMsg.Text = L.F("gen.updError", err);
+                        else if (ver == null) updMsg.Text = L.T("gen.updLatest");
+                        else { updMsg.Text = L.F("gen.updNew", ver); updUrl = url; updOpen.Visible = true; }
+                    }); } catch { }
+                });
+            };
+            updOpen.Click += delegate { try { Process.Start(updUrl); } catch { } };
+            y += 190 + PAD;
             p.AutoScrollMinSize = new Size(0, y);
             return p;
+        }
+
+        Label updMsg; Button updOpen; string updUrl;
+
+        void ExportSettings()
+        {
+            if (app == null) return;
+            using (SaveFileDialog d = new SaveFileDialog())
+            {
+                d.Title = L.T("gen.export"); d.Filter = L.T("gen.backupFilter") + " (*.rbbackup)|*.rbbackup"; d.FileName = "ResizeBadger.rbbackup";
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                string err = cfg.Export(d.FileName);
+                MessageBox.Show(this, err == null ? L.T("gen.exported") : err, "Resize Badger", MessageBoxButtons.OK, err == null ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+        }
+
+        void ImportSettings()
+        {
+            if (app == null) return;
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Title = L.T("gen.import"); d.Filter = L.T("gen.backupFilter") + " (*.rbbackup)|*.rbbackup";
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                if (MessageBox.Show(this, L.T("gen.importConfirm"), "Resize Badger", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                string err = cfg.Import(d.FileName);
+                if (err != null) { MessageBox.Show(this, err, "Resize Badger", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                saved = true; app.SettingsSaved(); Close();      // yeni ayarlar uygulanır; pencere yeni değerlerle yeniden açılınca görünür
+            }
         }
 
         string ThemeCode() { return themeBox.SelectedIndex == 1 ? "light" : (themeBox.SelectedIndex == 2 ? "dark" : "system"); }
@@ -462,7 +570,7 @@ namespace ResizeBadger
         void SaveClick(object sender, EventArgs e)
         {
             if (app == null) return;
-            grid.EndEdit(); ruleGrid.EndEdit();
+            grid.EndEdit(); ruleGrid.EndEdit(); gameGrid.EndEdit();
             List<Preset> list = new List<Preset>();
             foreach (DataGridViewRow r in grid.Rows)
             {
@@ -488,6 +596,20 @@ namespace ResizeBadger
                 rules.Add(ru);
             }
             cfg.Rules = rules;
+
+            List<Rule> games = new List<Rule>();
+            foreach (DataGridViewRow r in gameGrid.Rows)
+            {
+                string proc = (r.Cells[1].Value ?? "").ToString().Trim();
+                if (proc.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) proc = proc.Substring(0, proc.Length - 4);
+                if (proc.Length == 0) continue;
+                Rule g = new Rule(); g.Proc = proc; g.Enabled = Chk(r.Cells[0].Value);
+                string gp = (r.Cells[2].Value ?? "").ToString();
+                g.Preset = (gp == L.T("preset.none")) ? "" : gp;
+                games.Add(g);
+            }
+            cfg.SurroundGames = games;
+            cfg.SurroundGameOff = gameOffSw.Checked;
 
             for (int i = 0; i < hotBoxes.Length; i++) if (hotBoxes[i] != null) cfg.Hot[Config.Actions[i]] = hotBoxes[i].Text;
             cfg.AutoPreset = autoBox.SelectedIndex - 1;

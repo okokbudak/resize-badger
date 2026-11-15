@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -63,6 +65,8 @@ namespace ResizeBadger
         public string Lang = "auto";      // auto | tr | en | de | es | fr
         public string Theme = "system";   // system | light | dark
         public bool SurroundConfirm = true;
+        public List<Rule> SurroundGames = new List<Rule>();   // bu programlar çalışınca Surround otomatik açılır (Rule.Preset kullanılmaz)
+        public bool SurroundGameOff = true;                    // oyun(lar) kapanınca, Surround'u biz açtıysak geri kapat
         public int SurroundPrimary = 2;   // Surround kapanınca ana ekran olacak ekran (soldan sıra)
         public int[] Bezel = null;        // Surround bezel düzeltme: soldan sağa her ekran çifti arasındaki piksel boşluğu (0 = kapalı).
                                           // null = uygulamada hiç ayarlanmadı: NVIDIA uygulamasındaki / profildeki mevcut değerlere dokunulmaz.
@@ -95,6 +99,60 @@ namespace ResizeBadger
             foreach (string a in new List<string>(Hot.Keys)) { string n = NoAltGr(Hot[a]); if (n != Hot[a]) { Hot[a] = n; Migrated = true; } }
             foreach (Preset pr in Presets) { string n = NoAltGr(pr.Hotkey); if (n != pr.Hotkey) { pr.Hotkey = n; Migrated = true; } }
             if (Migrated) Save();
+        }
+
+        // ---- Yedekleme: ayarlar (+ varsa Surround profili) tek dosyada. Profil "sprofile=" satırında base64 tutulur.
+        public string Export(string file)
+        {
+            try
+            {
+                Save();
+                List<string> l = new List<string>(File.ReadAllLines(path, Encoding.UTF8));
+                byte[] prof = Surround.ReadProfile();
+                if (prof != null) l.Add("sprofile=" + Convert.ToBase64String(prof));
+                File.WriteAllLines(file, l.ToArray(), Encoding.UTF8);
+                return null;
+            }
+            catch (Exception e) { return e.Message; }
+        }
+
+        // Yedek dosyasından geri yükler (mevcut ayarların yerine geçer). Başarılıysa null, değilse hata metni.
+        public string Import(string file)
+        {
+            try
+            {
+                List<string> keep = new List<string>(); byte[] prof = null; bool known = false;
+                foreach (string raw in File.ReadAllLines(file, Encoding.UTF8))
+                {
+                    int i = raw.IndexOf('=');
+                    if (i < 1) continue;
+                    string k = raw.Substring(0, i).Trim();
+                    if (k == "sprofile") { try { prof = Convert.FromBase64String(raw.Substring(i + 1).Trim()); } catch { } continue; }
+                    if (k == "preset" || k == "lang" || k == "theme" || k == "autopreset" || k.StartsWith("hk_")) known = true;
+                    keep.Add(raw);
+                }
+                if (!known) return L.T("gen.importBad");
+                File.WriteAllLines(path, keep.ToArray(), Encoding.UTF8);
+                if (prof != null) Surround.WriteProfile(prof);
+                Reload();
+                return null;
+            }
+            catch (Exception e) { return e.Message; }
+        }
+
+        // Tüm alanları varsayılana döndürüp dosyadan yeniden okur
+        void Reload()
+        {
+            Rules = new List<Rule>(); SurroundGames = new List<Rule>(); Presets = new List<Preset>();
+            Lang = "auto"; Theme = "system"; SurroundConfirm = true; SurroundGameOff = true; SurroundPrimary = 2; Bezel = null;
+            AutoPreset = -1; Auto = false;
+            Exclude = "explorer;SearchHost;ShellExperienceHost;StartMenuExperienceHost;TextInputHost;LockApp;ResizeBadger";
+            Hot["fill"] = "Ctrl+Shift+F5"; Hot["restore"] = "Ctrl+Shift+F6"; Hot["all"] = "Ctrl+Shift+F7"; Hot["auto"] = "Ctrl+Shift+F8"; Hot["surround"] = "Ctrl+Shift+F9";
+            Load();
+            foreach (string a in new List<string>(Hot.Keys)) Hot[a] = NoAltGr(Hot[a]);
+            foreach (Preset pr in Presets) pr.Hotkey = NoAltGr(pr.Hotkey);
+            if (Presets.Count == 0) Presets.Add(Preset.Make("Full HD", 1920, 1080, 0, 0, true, false, "Ctrl+Shift+F1"));
+            Save();
         }
 
         public bool Migrated;   // true: eski Ctrl+Alt kısayolları otomatik değiştirildi (kullanıcıya haber verilir)
@@ -138,6 +196,8 @@ namespace ResizeBadger
                     else if (k == "theme") Theme = v;
                     else if (k == "sconfirm") SurroundConfirm = v == "1";
                     else if (k == "sprimary") int.TryParse(v, out SurroundPrimary);
+                    else if (k == "sgame") { Rule g = Rule.Parse(v); if (g != null) SurroundGames.Add(g); }
+                    else if (k == "sgameoff") SurroundGameOff = v == "1";
                     else if (k == "bezel")
                     {
                         List<int> g = new List<int>();
@@ -164,6 +224,8 @@ namespace ResizeBadger
                 l.Add("theme=" + Theme);
                 l.Add("sconfirm=" + (SurroundConfirm ? "1" : "0"));
                 l.Add("sprimary=" + SurroundPrimary);
+                l.Add("sgameoff=" + (SurroundGameOff ? "1" : "0"));
+                foreach (Rule g in SurroundGames) l.Add("sgame=" + g.Serialize());
                 if (Bezel != null)
                 {
                     string[] bz = new string[Bezel.Length]; for (int i = 0; i < bz.Length; i++) bz[i] = Bezel[i].ToString();
@@ -201,6 +263,38 @@ namespace ResizeBadger
                 }
             }
             return vk != 0 && (mod & 0xF) != 0;
+        }
+    }
+
+    // Güncelleme denetimi: yalnızca kullanıcı düğmeye basınca çalışır; GitHub'dan herkese açık "en son sürüm" bilgisini okur,
+    // kullanıcıya ait hiçbir bilgi göndermez (genel bir User-Agent kullanılır).
+    static class Updater
+    {
+        // Sonuç: (hata, yeni sürüm ya da null, sürüm sayfası adresi)
+        public static void Check(Action<string, string, string> done)
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                string err = null, ver = null, url = null;
+                try
+                {
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;     // TLS 1.2 (.NET 4'te varsayılan değil)
+                    HttpWebRequest rq = (HttpWebRequest)WebRequest.Create("https://api.github.com/repos/" + Ver.Repo.Replace("github.com/", "") + "/releases/latest");
+                    rq.UserAgent = "ResizeBadger-UpdateCheck"; rq.Timeout = 10000; rq.Accept = "application/vnd.github+json";
+                    using (WebResponse rs = rq.GetResponse())
+                    using (StreamReader sr = new StreamReader(rs.GetResponseStream(), Encoding.UTF8))
+                    {
+                        string json = sr.ReadToEnd();
+                        Match t = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"v?([^\"]+)\"");
+                        Match u = Regex.Match(json, "\"html_url\"\\s*:\\s*\"([^\"]+/releases/tag/[^\"]+)\"");
+                        Version latest, mine;
+                        if (!t.Success || !Version.TryParse(t.Groups[1].Value, out latest) || !Version.TryParse(Ver.V, out mine)) err = L.T("gen.updFail");
+                        else if (latest > mine) { ver = t.Groups[1].Value; url = u.Success ? u.Groups[1].Value : "https://" + Ver.Repo + "/releases"; }
+                    }
+                }
+                catch (Exception e) { err = e.Message; }
+                done(err, ver, url);
+            });
         }
     }
 
