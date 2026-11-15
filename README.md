@@ -8,6 +8,7 @@ Windows için hızlı pencere boyutlandırıcı ve NVIDIA Surround yöneticisi (
 - **Program kuralları:** Seçtiğiniz programın penceresi açılınca ön ayar otomatik uygulanır.
 - **Otomatik mod, toplu uygulama, geri alma.**
 - **NVIDIA Surround:** NVAPI ile tek kısayolla aç/kapat, 15 sn onay ve otomatik geri alma, kapanınca ana ekranı seçme.
+- **Bezel düzeltme (Surround):** NVIDIA uygulamasındaki gibi her ekran çifti için ayrı boşluk (piksel), ekran şeması, sürücü doğrulaması ve onaylı "Şimdi uygula".
 - **Modern arayüz:** Açık / Koyu / **Windows teması** (açık-koyu ve vurgu rengini Windows'tan alır, değişince kendisi de değişir).
 - **Dil:** Türkçe, English, Deutsch, Español, Français (varsayılan: Windows dili).
 - **Windows ile başlat** seçeneği (ayarlardan, tepsi menüsünden ya da kurulum sırasında).

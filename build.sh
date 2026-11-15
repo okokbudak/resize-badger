@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT="/home/orhan/projects/resize-badger"
 CSC="/mnt/c/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe"
-OUT_DIR="${1:-/mnt/d/OKWorks/Ai Projects/Resize Badger}"
+OUT_DIR="${1:-/mnt/d/OKWorks/Ai Projects/PC Tools/Resize Badger}"
 
 cd "$ROOT"
 [ "$(pwd)" = "$ROOT" ] || { echo "HATA: yanlış klasör: $(pwd)"; exit 1; }
